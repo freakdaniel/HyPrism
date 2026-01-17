@@ -254,20 +254,30 @@ jobs:
       - name: Build Flatpak (Linux)
         if: matrix.platform == 'linux'
         run: |
+          set -x  # Debug output
+          
           # Install Flatpak and flatpak-builder
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
           
-          # Add Flathub remote
+          # Add Flathub remote for both system and user
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          
-          # Install required runtime (use --user to avoid permission issues)
           flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          
+          # Install required runtime
           flatpak --user install -y flathub org.gnome.Platform//46 org.gnome.Sdk//46
+          
+          # Verify files exist
+          ls -la /tmp/HyPrism-binary
+          ls -la build/appicon.png
           
           # Prepare all files in the flatpak directory
           cp /tmp/HyPrism-binary flatpak/HyPrism
+          chmod +x flatpak/HyPrism
           cp build/appicon.png flatpak/dev.hyprism.HyPrism.png
+          
+          # Show what's in flatpak dir
+          ls -la flatpak/
           
           # Build the Flatpak from the flatpak directory
           cd flatpak
@@ -283,7 +293,7 @@ jobs:
           flatpak build-bundle repo HyPrism.flatpak dev.hyprism.HyPrism
           mv HyPrism.flatpak ../build/bin/
           
-          # Clean up
+          # Clean up generated files (keep original flatpak files)
           rm -f HyPrism dev.hyprism.HyPrism.png
           rm -rf repo builddir .flatpak-builder
 
