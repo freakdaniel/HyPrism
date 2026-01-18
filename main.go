@@ -20,7 +20,7 @@ func main() {
 	application := app.NewApp()
 
 	err := wails.Run(&options.App{
-		Title:         "HyPrism - Hytale Launcher",
+		Title:         app.AppTitle,
 		Width:         1280,
 		Height:        720,
 		MinWidth:      1280,

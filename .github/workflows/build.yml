@@ -58,17 +58,22 @@ jobs:
           # Extract version from tag or use branch name
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+            APP_TITLE="HyPrism - Hytale Launcher"
           elif [[ "${GITHUB_REF}" == refs/heads/nightly ]]; then
             # For nightly builds, use commit short SHA
             VERSION="nightly-$(git rev-parse --short HEAD)"
+            APP_TITLE="HyPrism Nightly - Hytale Launcher"
           elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
             VERSION="dev-main"
+            APP_TITLE="HyPrism Dev - Hytale Launcher"
           else
             VERSION="dev"
+            APP_TITLE="HyPrism - Hytale Launcher"
           fi
           
           echo "Building version: $VERSION"
-          wails build -clean -tags webkit2_41 -ldflags "-X 'HyPrism/app.AppVersion=$VERSION'"
+          echo "App title: $APP_TITLE"
+          wails build -clean -tags webkit2_41 -ldflags "-X 'HyPrism/app.AppVersion=$VERSION' -X 'HyPrism/app.AppTitle=$APP_TITLE'"
       
       - name: Create DMG (macOS)
         if: matrix.platform == 'macos'

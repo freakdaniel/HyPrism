@@ -144,6 +144,9 @@ func (a *App) emitError(err error) {
 // AppVersion is the current launcher version - set at build time via ldflags
 var AppVersion string = "dev"
 
+// AppTitle is the app window title - set at build time via ldflags
+var AppTitle string = "HyPrism - Hytale Launcher"
+
 // GetLauncherVersion returns the current launcher version
 func (a *App) GetLauncherVersion() string {
 	return AppVersion
