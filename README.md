@@ -1,7 +1,6 @@
 # HyPrism
-<img width="3084" height="1964" alt="Screenshot 2026-01-17 at 22 29 55@2x" src="https://github.com/user-attachments/assets/0a27bc91-d6d5-4148-ae3b-f9e6c36cd6db" />
-
 A multiplatform Hytale launcher with mod manager and more!
+<img width="3084" height="1964" alt="Screenshot 2026-01-17 at 22 29 55@2x" src="https://github.com/user-attachments/assets/0a27bc91-d6d5-4148-ae3b-f9e6c36cd6db" />
 
 ## Security Notice
 
