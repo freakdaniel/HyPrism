@@ -433,9 +433,19 @@ jobs:
           # Handle XDG directories for proper file access
           export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
           
-          # CRITICAL: Tell WebKit where to find bundled helper processes
-          export WEBKIT_EXEC_PATH="${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
-          export WEBKIT_PROCESS_CMD_PREFIX="${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          # CRITICAL: Tell WebKit where to find helper processes
+          # Check bundled processes first, then fall back to system
+          if [ -d "${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1" ] && [ -f "${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess" ]; then
+            export WEBKIT_EXEC_PATH="${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+            export WEBKIT_PROCESS_CMD_PREFIX="${HERE}/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          elif [ -d "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1" ]; then
+            export WEBKIT_EXEC_PATH="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+            export WEBKIT_PROCESS_CMD_PREFIX="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          elif [ -d "/usr/libexec/webkit2gtk-4.1" ]; then
+            # Fedora/RHEL location
+            export WEBKIT_EXEC_PATH="/usr/libexec/webkit2gtk-4.1"
+            export WEBKIT_PROCESS_CMD_PREFIX="/usr/libexec/webkit2gtk-4.1"
+          fi
           
           # WebKit environment variables for better compatibility
           export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-0}"
