@@ -29,15 +29,21 @@
       "name": "HyPrism",
       "buildsystem": "simple",
       "build-commands": [
-        "install -Dm755 HyPrism /app/bin/HyPrism",
+        "install -d /app/lib/hyprism",
+        "install -Dm755 bundle/HyPrism /app/lib/hyprism/HyPrism",
+        "cp -R bundle/wwwroot /app/lib/hyprism/ 2>/dev/null || true",
+        "cp -R bundle/runtimes /app/lib/hyprism/ 2>/dev/null || true",
+        "install -Dm644 bundle/jre.json /app/lib/hyprism/jre.json 2>/dev/null || true",
+        "ln -sf /app/lib/hyprism/HyPrism /app/bin/HyPrism",
         "install -Dm644 dev.hyprism.HyPrism.png /app/share/icons/hicolor/256x256/apps/dev.hyprism.HyPrism.png",
         "install -Dm644 dev.hyprism.HyPrism.desktop /app/share/applications/dev.hyprism.HyPrism.desktop",
         "install -Dm644 dev.hyprism.HyPrism.metainfo.xml /app/share/metainfo/dev.hyprism.HyPrism.metainfo.xml"
       ],
       "sources": [
         {
-          "type": "file",
-          "path": "HyPrism"
+          "type": "dir",
+          "path": "bundle",
+          "dest": "bundle"
         },
         {
           "type": "file",

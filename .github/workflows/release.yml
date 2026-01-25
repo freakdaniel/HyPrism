@@ -72,8 +72,10 @@ jobs:
       - name: Create .deb package
         run: |
           mkdir -p pkg/opt/hyprism pkg/usr/bin pkg/usr/share/applications pkg/usr/share/icons/hicolor/256x256/apps
-          cp artifacts/linux-x64/HyPrism pkg/opt/hyprism/
+          cp -R artifacts/linux-x64/* pkg/opt/hyprism/
+          chmod +x pkg/opt/hyprism/HyPrism
           ln -sf /opt/hyprism/HyPrism pkg/usr/bin/hyprism
+          ln -sf /opt/hyprism/HyPrism pkg/usr/bin/HyPrism
           cp packaging/flatpak/dev.hyprism.HyPrism.desktop pkg/usr/share/applications/ || true
           cp packaging/flatpak/dev.hyprism.HyPrism.png pkg/usr/share/icons/hicolor/256x256/apps/ || true
           fpm -s dir -t deb -n hyprism -v ${GITHUB_REF_NAME#v} -C pkg \
@@ -90,15 +92,16 @@ jobs:
 
       - name: Create AppImage
         run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
-          cp artifacts/linux-x64/HyPrism AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/HyPrism
+          mkdir -p AppDir/usr/bin AppDir/usr/lib/hyprism AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp -R artifacts/linux-x64/* AppDir/usr/lib/hyprism/
+          chmod +x AppDir/usr/lib/hyprism/HyPrism
+          ln -sf ../lib/hyprism/HyPrism AppDir/usr/bin/HyPrism
           cp packaging/flatpak/dev.hyprism.HyPrism.desktop AppDir/usr/share/applications/ || true
           cp packaging/flatpak/dev.hyprism.HyPrism.png AppDir/usr/share/icons/hicolor/256x256/apps/ || true
           cp packaging/flatpak/dev.hyprism.HyPrism.png AppDir/ || true
           cat > AppDir/AppRun << 'EOF'
           #!/bin/sh
-          exec "$(dirname "$0")/usr/bin/HyPrism" "$@"
+          exec "$(dirname "$0")/usr/lib/hyprism/HyPrism" "$@"
           EOF
           chmod +x AppDir/AppRun
           ln -sf usr/share/applications/dev.hyprism.HyPrism.desktop AppDir/HyPrism.desktop || true
@@ -223,13 +226,13 @@ jobs:
         run: |
           # Create x64 DMG
           mkdir -p dmg-x64
-          cp -R "artifacts/HyPrism-x64.app" dmg-x64/
+          cp -R "artifacts/HyPrism-x64.app" "dmg-x64/HyPrism.app"
           ln -s /Applications dmg-x64/Applications
           hdiutil create -volname "HyPrism" -srcfolder dmg-x64 -ov -format UDZO artifacts/HyPrism-macos-x64.dmg
           
           # Create arm64 DMG
           mkdir -p dmg-arm64
-          cp -R "artifacts/HyPrism-arm64.app" dmg-arm64/
+          cp -R "artifacts/HyPrism-arm64.app" "dmg-arm64/HyPrism.app"
           ln -s /Applications dmg-arm64/Applications
           hdiutil create -volname "HyPrism" -srcfolder dmg-arm64 -ov -format UDZO artifacts/HyPrism-macos-arm64.dmg
 

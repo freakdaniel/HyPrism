@@ -88,3 +88,4 @@ scripts/run.sh
 # Build artifacts folder
 artifacts/
 dmg-arm64/Applications
+scripts/build-linux-all-ubuntu.sh

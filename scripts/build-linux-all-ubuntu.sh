@@ -169,14 +169,15 @@ if [[ -d "$LINUX_OUT" ]]; then
     echo "==> Building AppImage"
     APPDIR="$ARTIFACTS/linux-x64/AppDir"
     rm -rf "$APPDIR"
-    mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
-    cp "$LINUX_OUT/HyPrism" "$APPDIR/usr/bin/HyPrism"
-    chmod +x "$APPDIR/usr/bin/HyPrism"
+    mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib/hyprism" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+    cp -R "$LINUX_OUT"/* "$APPDIR/usr/lib/hyprism/"
+    chmod +x "$APPDIR/usr/lib/hyprism/HyPrism"
+    ln -sf ../lib/hyprism/HyPrism "$APPDIR/usr/bin/HyPrism"
     [[ -f "$DESKTOP_SRC" ]] && cp "$DESKTOP_SRC" "$APPDIR/usr/share/applications/dev.hyprism.HyPrism.desktop"
     [[ -f "$ICON_SRC" ]] && cp "$ICON_SRC" "$APPDIR/usr/share/icons/hicolor/256x256/apps/dev.hyprism.HyPrism.png"
     cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
-exec "$(dirname "$0")/usr/bin/HyPrism" "$@"
+exec "$(dirname "$0")/usr/lib/hyprism/HyPrism" "$@"
 EOF
     chmod +x "$APPDIR/AppRun"
     (cd "$APPDIR" && ln -sf usr/share/applications/dev.hyprism.HyPrism.desktop HyPrism.desktop)
@@ -189,7 +190,9 @@ EOF
     echo "==> Building Flatpak"
     FLATPAK_STAGE="$ARTIFACTS/linux-x64/flatpak-build"
     FLATPAK_REPO="$ARTIFACTS/flatpak-repo"
-    cp "$LINUX_OUT/HyPrism" "$ROOT/packaging/flatpak/HyPrism"
+    rm -rf "$ROOT/packaging/flatpak/bundle"
+    mkdir -p "$ROOT/packaging/flatpak/bundle"
+    cp -R "$LINUX_OUT"/* "$ROOT/packaging/flatpak/bundle/"
     # Use --disable-rofiles-fuse for Docker compatibility
     flatpak-builder --force-clean --disable-rofiles-fuse "$FLATPAK_STAGE" "$ROOT/packaging/flatpak/dev.hyprism.HyPrism.json" --repo="$FLATPAK_REPO" || \
       echo "Warning: Flatpak build failed, skipping"
