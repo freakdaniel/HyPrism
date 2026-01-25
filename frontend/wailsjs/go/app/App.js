@@ -279,6 +279,10 @@ export function OpenInstanceModsFolder(branch, version) {
     return callBackend('OpenInstanceModsFolder', branch, version);
 }
 
+export function OpenInstanceFolder(branch, version) {
+    return callBackend('OpenInstanceFolder', branch, version);
+}
+
 export function OpenModsFolder() {
     return callBackend('OpenModsFolder');
 }

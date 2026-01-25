@@ -51,6 +51,7 @@ public class AppService : IDisposable
         Directory.CreateDirectory(_appDir);
         _configPath = Path.Combine(_appDir, "config.json");
         _config = LoadConfig();
+        MigrateLegacyData();
         _butlerService = new ButlerService(_appDir);
         _discordService = new DiscordService();
         _discordService.Initialize();
@@ -148,7 +149,7 @@ public class AppService : IDisposable
     private string GetInstanceRoot()
     {
         var root = string.IsNullOrWhiteSpace(_config.InstanceDirectory)
-            ? Path.Combine(_appDir, "instance")
+            ? Path.Combine(_appDir, "instances")
             : _config.InstanceDirectory;
 
         root = Environment.ExpandEnvironmentVariables(root);
@@ -174,6 +175,510 @@ public class AppService : IDisposable
     {
         string normalizedBranch = NormalizeVersionType(branch);
         return Path.Combine(GetInstanceRoot(), normalizedBranch);
+    }
+
+    private static void SafeCopyDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var destFile = Path.Combine(destDir, Path.GetFileName(file));
+            if (!File.Exists(destFile))
+            {
+                File.Copy(file, destFile, overwrite: false);
+            }
+        }
+
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            var destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
+            SafeCopyDirectory(dir, destSubDir);
+        }
+    }
+
+    private Config? LoadConfigFromPath(string path)
+    {
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private Config? LoadConfigFromToml(string path)
+    {
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            var cfg = new Config();
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
+
+                static string Unquote(string value)
+                {
+                    value = value.Trim();
+                    // Handle double quotes
+                    if (value.StartsWith("\"") && value.EndsWith("\"") && value.Length >= 2)
+                    {
+                        return value.Substring(1, value.Length - 2);
+                    }
+                    // Handle single quotes (TOML style)
+                    if (value.StartsWith("'") && value.EndsWith("'") && value.Length >= 2)
+                    {
+                        return value.Substring(1, value.Length - 2);
+                    }
+                    return value;
+                }
+
+                var parts = trimmed.Split('=', 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2) continue;
+
+                var key = parts[0].Trim().ToLowerInvariant();
+                var val = Unquote(parts[1]);
+
+                switch (key)
+                {
+                    case "nick":
+                    case "name":
+                    case "username":
+                        cfg.Nick = val;
+                        break;
+                    case "uuid":
+                        cfg.UUID = val;
+                        break;
+                    case "instance_directory":
+                    case "instancedirectory":
+                    case "instance_dir":
+                    case "instancepath":
+                    case "instance_path":
+                        cfg.InstanceDirectory = val;
+                        break;
+                    case "versiontype":
+                    case "branch":
+                        cfg.VersionType = NormalizeVersionType(val);
+                        break;
+                    case "selectedversion":
+                        if (int.TryParse(val, out var sel)) cfg.SelectedVersion = sel;
+                        break;
+                }
+            }
+            return cfg;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private IEnumerable<string> GetLegacyRoots()
+    {
+        var roots = new List<string>();
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            roots.Add(path);
+        }
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Add(Path.Combine(appData, "hyprism"));
+            Add(Path.Combine(appData, "Hyprism"));
+            Add(Path.Combine(appData, "HyPrism")); // legacy casing
+            Add(Path.Combine(appData, "HyPrismLauncher"));
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Add(Path.Combine(home, "Library", "Application Support", "hyprism"));
+            Add(Path.Combine(home, "Library", "Application Support", "Hyprism"));
+        }
+        else
+        {
+            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            if (!string.IsNullOrWhiteSpace(xdg))
+            {
+                Add(Path.Combine(xdg, "hyprism"));
+                Add(Path.Combine(xdg, "Hyprism"));
+            }
+            Add(Path.Combine(home, ".local", "share", "hyprism"));
+            Add(Path.Combine(home, ".local", "share", "Hyprism"));
+        }
+
+        return roots;
+    }
+
+    private IEnumerable<string> GetInstanceRootsIncludingLegacy()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        IEnumerable<string> YieldIfExists(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) yield break;
+            if (!Directory.Exists(path)) yield break;
+
+            var full = Path.GetFullPath(path);
+            if (seen.Add(full))
+            {
+                yield return full;
+            }
+        }
+
+        foreach (var root in YieldIfExists(GetInstanceRoot()))
+        {
+            yield return root;
+        }
+
+        foreach (var legacy in GetLegacyRoots())
+        {
+            // Check legacy naming: 'instance' (singular) and 'instances' (plural)
+            foreach (var r in YieldIfExists(Path.Combine(legacy, "instance")))
+            {
+                yield return r;
+            }
+
+            foreach (var r in YieldIfExists(Path.Combine(legacy, "instances")))
+            {
+                yield return r;
+            }
+        }
+
+        // Also check old 'instance' folder in current app dir (singular -> plural migration)
+        var oldInstanceDir = Path.Combine(_appDir, "instance");
+        foreach (var r in YieldIfExists(oldInstanceDir))
+        {
+            yield return r;
+        }
+    }
+
+    private string? FindExistingInstancePath(string branch, int version)
+    {
+        string normalizedBranch = NormalizeVersionType(branch);
+        string versionSegment = version == 0 ? "latest" : version.ToString();
+
+        foreach (var root in GetInstanceRootsIncludingLegacy())
+        {
+            // New layout: branch/version
+            var candidate1 = Path.Combine(root, normalizedBranch, versionSegment);
+            if (Directory.Exists(candidate1))
+            {
+                return candidate1;
+            }
+
+            // Legacy dash layout: release-5
+            var candidate2 = Path.Combine(root, $"{normalizedBranch}-{versionSegment}");
+            if (Directory.Exists(candidate2))
+            {
+                return candidate2;
+            }
+
+            // Legacy dash layout with v prefix: release-v5
+            var candidate3 = Path.Combine(root, $"{normalizedBranch}-v{versionSegment}");
+            if (Directory.Exists(candidate3))
+            {
+                return candidate3;
+            }
+        }
+
+        return null;
+    }
+
+    private string? LoadLegacyUuid(string legacyRoot)
+    {
+        var candidates = new[] { "uuid.txt", "uuid", "uuid.dat" };
+        foreach (var name in candidates)
+        {
+            var path = Path.Combine(legacyRoot, name);
+            if (!File.Exists(path)) continue;
+
+            try
+            {
+                var content = File.ReadAllText(path).Trim();
+                if (!string.IsNullOrWhiteSpace(content) && Guid.TryParse(content, out var guid))
+                {
+                    return guid.ToString();
+                }
+            }
+            catch
+            {
+                // ignore malformed legacy uuid files
+            }
+        }
+
+        return null;
+    }
+
+    private void MigrateLegacyData()
+    {
+        try
+        {
+            foreach (var legacyRoot in GetLegacyRoots())
+            {
+                if (!Directory.Exists(legacyRoot)) continue;
+
+                Logger.Info("Migrate", $"Found legacy data at {legacyRoot}");
+
+                var legacyConfigPath = Path.Combine(legacyRoot, "config.json");
+                var legacyTomlPath = Path.Combine(legacyRoot, "config.toml");
+                
+                // Load both JSON and TOML configs
+                var jsonConfig = LoadConfigFromPath(legacyConfigPath);
+                var tomlConfig = LoadConfigFromToml(legacyTomlPath);
+                
+                // Prefer TOML if it has a custom nick (not default), or prefer whichever has custom data
+                Config? legacyConfig = null;
+                bool tomlHasCustomNick = tomlConfig != null && !string.IsNullOrWhiteSpace(tomlConfig.Nick) 
+                    && !string.Equals(tomlConfig.Nick, "Hyprism", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(tomlConfig.Nick, "Player", StringComparison.OrdinalIgnoreCase);
+                bool jsonHasCustomNick = jsonConfig != null && !string.IsNullOrWhiteSpace(jsonConfig.Nick)
+                    && !string.Equals(jsonConfig.Nick, "Hyprism", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(jsonConfig.Nick, "Player", StringComparison.OrdinalIgnoreCase);
+                    
+                if (tomlHasCustomNick)
+                {
+                    legacyConfig = tomlConfig;
+                    Logger.Info("Migrate", $"Using legacy config.toml (has custom nick): nick={legacyConfig?.Nick}, uuid={legacyConfig?.UUID}");
+                }
+                else if (jsonHasCustomNick)
+                {
+                    legacyConfig = jsonConfig;
+                    Logger.Info("Migrate", $"Using legacy config.json (has custom nick): nick={legacyConfig?.Nick}, uuid={legacyConfig?.UUID}");
+                }
+                else if (tomlConfig != null)
+                {
+                    legacyConfig = tomlConfig;
+                    Logger.Info("Migrate", $"Using legacy config.toml: nick={legacyConfig?.Nick}, uuid={legacyConfig?.UUID}");
+                }
+                else if (jsonConfig != null)
+                {
+                    legacyConfig = jsonConfig;
+                    Logger.Info("Migrate", $"Using legacy config.json: nick={legacyConfig?.Nick}, uuid={legacyConfig?.UUID}");
+                }
+                else
+                {
+                    Logger.Warning("Migrate", $"No valid config found in {legacyRoot}");
+                }
+
+                // Only merge legacy config when current user name is still a default/placeholder
+                bool allowMerge = string.IsNullOrWhiteSpace(_config.Nick)
+                                  || string.Equals(_config.Nick, "Hyprism", StringComparison.OrdinalIgnoreCase)
+                                  || string.Equals(_config.Nick, "Player", StringComparison.OrdinalIgnoreCase);
+
+                if (!allowMerge)
+                {
+                    Logger.Info("Migrate", "Skipping legacy config merge because current nickname is custom.");
+                }
+
+                var updated = false;
+
+                if (legacyConfig != null && allowMerge)
+                {
+                    Logger.Info("Migrate", $"Merging legacy config: nick={legacyConfig.Nick}");
+                    if (!string.IsNullOrWhiteSpace(legacyConfig.Nick))
+                    {
+                        _config.Nick = legacyConfig.Nick;
+                        updated = true;
+                        Logger.Success("Migrate", $"Migrated nickname: {legacyConfig.Nick}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(_config.UUID) && !string.IsNullOrWhiteSpace(legacyConfig.UUID))
+                    {
+                        _config.UUID = legacyConfig.UUID;
+                        updated = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(_config.InstanceDirectory) && !string.IsNullOrWhiteSpace(legacyConfig.InstanceDirectory))
+                    {
+                        _config.InstanceDirectory = legacyConfig.InstanceDirectory;
+                        updated = true;
+                    }
+
+                    if (_config.SelectedVersion == 0 && legacyConfig.SelectedVersion > 0)
+                    {
+                        _config.SelectedVersion = legacyConfig.SelectedVersion;
+                        updated = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(_config.VersionType) && !string.IsNullOrWhiteSpace(legacyConfig.VersionType))
+                    {
+                        _config.VersionType = NormalizeVersionType(legacyConfig.VersionType);
+                        updated = true;
+                    }
+                }
+
+                // Fallback: pick up a legacy uuid file if config lacked one
+                if (string.IsNullOrWhiteSpace(_config.UUID))
+                {
+                    var legacyUuid = LoadLegacyUuid(legacyRoot);
+                    if (!string.IsNullOrWhiteSpace(legacyUuid))
+                    {
+                        _config.UUID = legacyUuid;
+                        updated = true;
+                        Logger.Info("Migrate", "Recovered legacy UUID from legacy folder.");
+                    }
+                }
+
+                if (updated)
+                {
+                    SaveConfigInternal(_config);
+                }
+
+                // Detect legacy instance folders and copy to new structure
+                var legacyInstanceRoot = Path.Combine(legacyRoot, "instance");
+                var legacyInstancesRoot = Path.Combine(legacyRoot, "instances"); // v1 naming
+                if (!Directory.Exists(legacyInstanceRoot) && Directory.Exists(legacyInstancesRoot))
+                {
+                    legacyInstanceRoot = legacyInstancesRoot;
+                }
+
+                if (Directory.Exists(legacyInstanceRoot))
+                {
+                    Logger.Info("Migrate", $"Legacy instances detected at {legacyInstanceRoot}");
+                    MigrateLegacyInstances(legacyInstanceRoot);
+                }
+            }
+
+            // Also migrate old 'instance' folder in current app dir (singular -> plural)
+            var oldInstanceDir = Path.Combine(_appDir, "instance");
+            if (Directory.Exists(oldInstanceDir))
+            {
+                Logger.Info("Migrate", $"Old 'instance' folder detected at {oldInstanceDir}");
+                MigrateLegacyInstances(oldInstanceDir);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("Migrate", $"Legacy migration skipped: {ex.Message}");
+        }
+    }
+
+    private void MigrateLegacyInstances(string legacyInstanceRoot)
+    {
+        try
+        {
+            var newInstanceRoot = GetInstanceRoot();
+            Logger.Info("Migrate", $"Copying legacy instances from {legacyInstanceRoot} to {newInstanceRoot}");
+
+            foreach (var legacyDir in Directory.GetDirectories(legacyInstanceRoot))
+            {
+                var folderName = Path.GetFileName(legacyDir);
+                if (string.IsNullOrEmpty(folderName)) continue;
+
+                // Parse legacy naming: "release-v5" or "release-5" or "release/5"
+                string branch;
+                string versionSegment;
+
+                if (folderName.Contains("/"))
+                {
+                    // Already new format: release/5
+                    var parts = folderName.Split('/');
+                    branch = parts[0];
+                    versionSegment = parts.Length > 1 ? parts[1] : "latest";
+                }
+                else if (folderName.Contains("-"))
+                {
+                    // Legacy dash format: release-v5 or release-5
+                    var parts = folderName.Split('-', 2);
+                    branch = parts[0];
+                    versionSegment = parts.Length > 1 ? parts[1] : "latest";
+                    
+                    // Strip 'v' prefix if present
+                    if (versionSegment.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    {
+                        versionSegment = versionSegment.Substring(1);
+                    }
+                }
+                else
+                {
+                    // Assume it's a branch name with no version
+                    branch = folderName;
+                    versionSegment = "latest";
+                }
+
+                // Normalize branch name
+                branch = NormalizeVersionType(branch);
+
+                // Create target path in new structure: instance/release/5
+                var targetBranch = Path.Combine(newInstanceRoot, branch);
+                var targetVersion = Path.Combine(targetBranch, versionSegment);
+
+                // Skip if already exists in new location
+                if (Directory.Exists(targetVersion) && IsClientPresent(targetVersion))
+                {
+                    Logger.Info("Migrate", $"Skipping {folderName} - already exists at {targetVersion}");
+                    continue;
+                }
+
+                Logger.Info("Migrate", $"Copying {folderName} -> {branch}/{versionSegment}");
+                Directory.CreateDirectory(targetVersion);
+
+                // Check if legacy has game/ subfolder or direct Client/ folder
+                var legacyGameDir = Path.Combine(legacyDir, "game");
+                var legacyClientDir = Path.Combine(legacyDir, "Client");
+                
+                if (Directory.Exists(legacyGameDir))
+                {
+                    // Legacy structure: release-v5/game/Client -> release/5/Client
+                    foreach (var item in Directory.GetFileSystemEntries(legacyGameDir))
+                    {
+                        var name = Path.GetFileName(item);
+                        var dest = Path.Combine(targetVersion, name);
+                        
+                        if (Directory.Exists(item))
+                        {
+                            SafeCopyDirectory(item, dest);
+                        }
+                        else if (File.Exists(item))
+                        {
+                            File.Copy(item, dest, overwrite: false);
+                        }
+                    }
+                    Logger.Success("Migrate", $"Migrated {folderName} (from game/ subfolder)");
+                }
+                else if (Directory.Exists(legacyClientDir))
+                {
+                    // Direct Client/ folder structure
+                    foreach (var item in Directory.GetFileSystemEntries(legacyDir))
+                    {
+                        var name = Path.GetFileName(item);
+                        var dest = Path.Combine(targetVersion, name);
+                        
+                        if (Directory.Exists(item))
+                        {
+                            SafeCopyDirectory(item, dest);
+                        }
+                        else if (File.Exists(item))
+                        {
+                            File.Copy(item, dest, overwrite: false);
+                        }
+                    }
+                    Logger.Success("Migrate", $"Migrated {folderName} (direct structure)");
+                }
+                else
+                {
+                    // Copy everything as-is
+                    SafeCopyDirectory(legacyDir, targetVersion);
+                    Logger.Success("Migrate", $"Migrated {folderName} (full copy)");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Migrate", $"Failed to migrate legacy instances: {ex.Message}");
+        }
     }
 
     private string GetLatestInstancePath(string branch)
@@ -224,6 +729,20 @@ public class AppService : IDisposable
         }
         string normalizedBranch = NormalizeVersionType(branch);
         return Path.Combine(GetInstanceRoot(), normalizedBranch, version.ToString());
+    }
+
+    private string ResolveInstancePath(string branch, int version, bool preferExisting)
+    {
+        if (preferExisting)
+        {
+            var existing = FindExistingInstancePath(branch, version);
+            if (!string.IsNullOrWhiteSpace(existing))
+            {
+                return existing;
+            }
+        }
+
+        return GetInstancePath(branch, version);
     }
 
     private async Task<(string branch, int version)> ResolveLatestCompositeAsync()
@@ -443,16 +962,23 @@ public class AppService : IDisposable
         // Version 0 means "latest" - check if any version is installed
         if (versionNumber == 0)
         {
-            var latestPath = GetLatestInstancePath(normalizedBranch);
-            bool hasClient = IsClientPresent(latestPath);
-            Logger.Info("Version", $"IsVersionInstalled check for version 0 (latest): path={latestPath}, hasClient={hasClient}");
+            var resolvedLatest = ResolveInstancePath(normalizedBranch, 0, preferExisting: true);
+            bool hasClient = IsClientPresent(resolvedLatest);
+            Logger.Info("Version", $"IsVersionInstalled check for version 0 (latest): path={resolvedLatest}, hasClient={hasClient}");
             return hasClient;
         }
         
-        string versionPath = Path.Combine(GetInstanceRoot(), normalizedBranch, versionNumber.ToString());
+        string versionPath = ResolveInstancePath(normalizedBranch, versionNumber, preferExisting: true);
 
         if (!IsClientPresent(versionPath))
         {
+            // Last chance: try legacy dash naming in legacy roots
+            var legacy = FindExistingInstancePath(normalizedBranch, versionNumber);
+            if (!string.IsNullOrWhiteSpace(legacy))
+            {
+                Logger.Info("Version", $"IsVersionInstalled: found legacy layout at {legacy}");
+                return IsClientPresent(legacy);
+            }
             return false;
         }
 
@@ -461,23 +987,36 @@ public class AppService : IDisposable
 
     private bool IsClientPresent(string versionPath)
     {
-        string clientPath;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        // Try multiple layouts: new layout (Client/...) and legacy layout (game/Client/...)
+        var subfolders = new[] { "", "game" };
+
+        foreach (var sub in subfolders)
         {
-            clientPath = Path.Combine(versionPath, "Client", "Hytale.app", "Contents", "MacOS", "HytaleClient");
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            clientPath = Path.Combine(versionPath, "Client", "HytaleClient.exe");
-        }
-        else
-        {
-            clientPath = Path.Combine(versionPath, "Client", "HytaleClient");
+            string basePath = string.IsNullOrEmpty(sub) ? versionPath : Path.Combine(versionPath, sub);
+            string clientPath;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                clientPath = Path.Combine(basePath, "Client", "Hytale.app", "Contents", "MacOS", "HytaleClient");
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                clientPath = Path.Combine(basePath, "Client", "HytaleClient.exe");
+            }
+            else
+            {
+                clientPath = Path.Combine(basePath, "Client", "HytaleClient");
+            }
+
+            if (File.Exists(clientPath))
+            {
+                Logger.Info("Version", $"IsClientPresent: found at {clientPath}");
+                return true;
+            }
         }
 
-        bool exists = File.Exists(clientPath);
-        Logger.Info("Version", $"IsClientPresent: path={clientPath}, exists={exists}");
-        return exists;
+        Logger.Info("Version", $"IsClientPresent: not found in {versionPath}");
+        return false;
     }
 
     private bool AreAssetsPresent(string versionPath)
@@ -500,35 +1039,76 @@ public class AppService : IDisposable
     public List<int> GetInstalledVersionsForBranch(string branch)
     {
         var normalizedBranch = NormalizeVersionType(branch);
-        var result = new List<int>();
+        var result = new HashSet<int>();
 
-        string branchPath = Path.Combine(GetInstanceRoot(), normalizedBranch);
-        
-        if (Directory.Exists(branchPath))
+        foreach (var root in GetInstanceRootsIncludingLegacy())
         {
-            foreach (var dir in Directory.GetDirectories(branchPath))
+            // New layout: branch/version
+            string branchPath = Path.Combine(root, normalizedBranch);
+            if (Directory.Exists(branchPath))
+            {
+                foreach (var dir in Directory.GetDirectories(branchPath))
+                {
+                    var name = Path.GetFileName(dir);
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (string.Equals(name, "latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (IsClientPresent(dir))
+                        {
+                            result.Add(0);
+                            Logger.Info("Version", $"Installed versions include latest for {normalizedBranch} at {dir}");
+                        }
+                        continue;
+                    }
+
+                    if (int.TryParse(name, out int version))
+                    {
+                        if (IsClientPresent(dir))
+                        {
+                            result.Add(version);
+                            Logger.Info("Version", $"Installed version detected: {normalizedBranch}/{version} at {dir}");
+                        }
+                    }
+                }
+            }
+
+            // Legacy dash layout: release-29 or release-v29
+            foreach (var dir in Directory.GetDirectories(root))
             {
                 var name = Path.GetFileName(dir);
-                if (string.Equals(name, "latest", StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrEmpty(name)) continue;
+                if (!name.StartsWith(normalizedBranch + "-", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var suffix = name.Substring(normalizedBranch.Length + 1);
+                
+                // Remove 'v' prefix if present (e.g., "v5" -> "5")
+                if (suffix.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                {
+                    suffix = suffix.Substring(1);
+                }
+
+                if (string.Equals(suffix, "latest", StringComparison.OrdinalIgnoreCase))
                 {
                     if (IsClientPresent(dir))
                     {
                         result.Add(0);
+                        Logger.Info("Version", $"Installed legacy latest detected: {name} at {dir}");
                     }
                     continue;
                 }
 
-                if (int.TryParse(name, out int version))
+                if (int.TryParse(suffix, out int version))
                 {
                     if (IsClientPresent(dir))
                     {
                         result.Add(version);
+                        Logger.Info("Version", $"Installed legacy version detected: {name} at {dir}");
                     }
                 }
             }
         }
         
-        return result;
+        return result.ToList();
     }
 
     public async Task<bool> CheckLatestNeedsUpdateAsync(string branch)
@@ -571,9 +1151,7 @@ public class AppService : IDisposable
                 targetVersion = versions[0];
             }
 
-            string versionPath = isLatestInstance
-                ? GetLatestInstancePath(branch)
-                : Path.Combine(GetInstanceRoot(), branch, targetVersion.ToString());
+            string versionPath = ResolveInstancePath(branch, isLatestInstance ? 0 : targetVersion, preferExisting: true);
             Directory.CreateDirectory(versionPath);
 
             // Check if we need to download/install - verify all components
@@ -1260,11 +1838,11 @@ public class AppService : IDisposable
             string stdout = await proc.StandardOutput.ReadToEndAsync();
             await proc.WaitForExitAsync();
 
-            var output = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-            var match = Regex.Match(output, "version \"(?<ver>[^\" ]+)\"");
+            var combined = string.IsNullOrWhiteSpace(stdout) ? stderr : stdout + "\n" + stderr;
+            var match = Regex.Match(combined, "version \"?([0-9][^\"\\s]*)");
             if (match.Success)
             {
-                return ParseJavaMajor(match.Groups["ver"].Value);
+                return ParseJavaMajor(match.Groups[1].Value);
             }
         }
         catch (Exception ex)
@@ -1866,7 +2444,7 @@ public class AppService : IDisposable
         try
         {
             string normalizedBranch = NormalizeVersionType(branch);
-            string versionPath = GetInstancePath(normalizedBranch, versionNumber);
+            string versionPath = ResolveInstancePath(normalizedBranch, versionNumber, preferExisting: true);
             if (Directory.Exists(versionPath))
             {
                 Directory.Delete(versionPath, true);
@@ -1915,9 +2493,9 @@ public class AppService : IDisposable
 
     public Task<string?> SelectInstanceDirectoryAsync()
     {
-        // Folder picker is not available in Photino. Return the current path so
-        // the frontend can show it and collect user input manually.
-        return Task.FromResult<string?>(_config.InstanceDirectory);
+        // Folder picker is not available in Photino. Return the current/active
+        // instance root so the frontend can show it and collect user input manually.
+        return Task.FromResult<string?>(GetInstanceRoot());
     }
 
     // News - matches Go implementation
@@ -2367,7 +2945,7 @@ public class AppService : IDisposable
 
         // Get current version's mods folder in UserData
         string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-        string versionPath = GetInstancePath(resolvedBranch, version);
+        string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
         if (!Directory.Exists(versionPath)) return result;
         
         string modsPath = GetModsPath(versionPath);
@@ -2409,7 +2987,7 @@ public class AppService : IDisposable
         {
             // Get the target instance path and create mods directory inside UserData
             string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = GetInstancePath(resolvedBranch, version);
+            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
             string modsPath = GetModsPath(versionPath);
             
             Logger.Info("Mods", $"Installing mod to: {modsPath}");
@@ -2511,7 +3089,7 @@ public class AppService : IDisposable
         {
             // Get current version's mods folder in UserData
             string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = GetInstancePath(resolvedBranch, version);
+            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
             if (!Directory.Exists(versionPath)) return false;
             
             string modsPath = GetModsPath(versionPath);
@@ -2563,7 +3141,7 @@ public class AppService : IDisposable
         {
             // Get current version's mods folder in UserData
             string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = GetInstancePath(resolvedBranch, version);
+            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
             if (!Directory.Exists(versionPath)) Directory.CreateDirectory(versionPath);
             
             string modsPath = GetModsPath(versionPath);
@@ -2579,6 +3157,34 @@ public class AppService : IDisposable
             else
             {
                 Process.Start("xdg-open", $"\"{modsPath}\"");
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool OpenInstanceFolder(string branch, int version)
+    {
+        try
+        {
+            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
+            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
+            Directory.CreateDirectory(versionPath);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start("explorer.exe", $"\"{versionPath}\"");
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                Process.Start(new ProcessStartInfo("open", $"\"{versionPath}\"") { UseShellExecute = false });
+            }
+            else
+            {
+                Process.Start("xdg-open", $"\"{versionPath}\"");
             }
             return true;
         }

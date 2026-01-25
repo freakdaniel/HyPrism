@@ -98,6 +98,8 @@ export function OpenGameFolder():Promise<void>;
 
 export function OpenInstanceModsFolder(arg1:string,arg2:number):Promise<void>;
 
+export function OpenInstanceFolder(arg1:string,arg2:number):Promise<void>;
+
 export function OpenModsFolder():Promise<void>;
 
 export function QuickLaunch():Promise<void>;

@@ -14,6 +14,7 @@ import hytaleLogo from './assets/logo.png';
 import {
   DownloadAndLaunch,
   OpenFolder,
+  OpenInstanceFolder,
   GetNick,
   SetNick,
   GetUUID,
@@ -550,13 +551,10 @@ const App: React.FC = () => {
       setCustomInstanceDir(selectedDir);
       console.log('Instance directory updated to:', selectedDir);
 
-      // Show info about what gets moved
-      setError({
-        type: 'INFO',
-        message: t('Instance Directory Updated'),
-        technical: t('Game instances will now be stored in:\n{{dir}}\n\nNote: The following remain in AppData:\n• Java Runtime (JRE)\n• Butler tool\n• Cache files\n• Logs\n• Launcher settings\n• WebView2 (EBWebView folder)\n\nYou may need to reinstall the game if switching drives.', { dir: selectedDir }),
-        timestamp: new Date().toISOString()
-      });
+      window.alert(
+        t('Instance Directory Updated') + '\n\n' +
+        t('Game instances will now be stored in:\n{{dir}}\n\nNote: The following remain in AppData:\n• Java Runtime (JRE)\n• Butler tool\n• Cache files\n• Logs\n• Launcher settings\n• WebView2 (EBWebView folder)\n\nYou may need to reinstall the game if switching drives.', { dir: selectedDir })
+      );
 
       // Reload version list and check installed versions for new directory
       setIsLoadingVersions(true);
@@ -668,7 +666,7 @@ const App: React.FC = () => {
           onVersionChange={handleVersionChange}
           onCustomDirChange={handleCustomDirChange}
           actions={{
-            openFolder: OpenFolder,
+            openFolder: () => OpenInstanceFolder(currentBranch, currentVersion),
             showDelete: () => setShowDelete(true),
             showModManager: (query?: string) => {
               setModManagerSearchQuery(query || '');

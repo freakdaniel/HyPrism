@@ -255,6 +255,9 @@ class Program
                         "OpenInstanceModsFolder" => app.OpenInstanceModsFolder(
                             GetArg<string>(request.Args, 0),
                             GetArg<int>(request.Args, 1)),
+                        "OpenInstanceFolder" => app.OpenInstanceFolder(
+                            GetArg<string>(request.Args, 0),
+                            GetArg<int>(request.Args, 1)),
                         "CheckInstanceModUpdates" => await app.CheckInstanceModUpdatesAsync(
                             GetArg<string>(request.Args, 0),
                             GetArg<int>(request.Args, 1)),
