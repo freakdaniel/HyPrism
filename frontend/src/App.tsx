@@ -433,14 +433,14 @@ const App: React.FC = () => {
       if (ok) {
         setError({
           type: 'INFO',
-          message: t('Downloaded latest HyPrism to your Downloads folder.'),
-          technical: t('We removed the old app (if present), downloaded HyPrism-latest.dmg, and tried to open it for you.'),
+          message: t('Downloaded the latest HyPrism to your Downloads folder.'),
+          technical: t('We attempted to open the file so you can install it. If it did not open, go to Downloads and run the file manually.'),
           timestamp: new Date().toISOString()
         });
       } else {
         setError({
           type: 'INFO',
-          message: t('Could not auto-update. Please download manually.'),
+          message: t('Could not auto-download. Please download manually.'),
           technical: 'https://github.com/yyyumeniku/HyPrism/releases/latest',
           timestamp: new Date().toISOString()
         });

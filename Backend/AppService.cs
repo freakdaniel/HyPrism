@@ -1915,53 +1915,73 @@ public class AppService : IDisposable
         }
     }
 
-    // Update - macOS helper: delete old app and download latest DMG, then open it.
-    // For other platforms, open the releases page.
+    // Update - download latest launcher per platform instead of in-place update
     public async Task<bool> UpdateAsync(JsonElement[]? args)
     {
+        const string releasesPage = "https://github.com/yyyumeniku/HyPrism/releases/latest";
+
         try
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                Logger.Warning("Update", "Auto-update only implemented for macOS. Opening releases page.");
-                BrowserOpenURL("https://github.com/yyyumeniku/HyPrism/releases/latest");
-                return false;
-            }
-
-            // Fetch latest release from GitHub API and locate the arm64 DMG
+            // Fetch latest release assets
             var apiUrl = "https://api.github.com/repos/yyyumeniku/HyPrism/releases/latest";
             var json = await HttpClient.GetStringAsync(apiUrl);
             using var doc = JsonDocument.Parse(json);
             var assets = doc.RootElement.GetProperty("assets");
 
-            string? dmgUrl = null;
+            // Pick asset by platform/arch
+            string? targetAsset = null;
+            var arch = RuntimeInformation.ProcessArchitecture;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                targetAsset = "macos-arm64.dmg"; // Apple Silicon only
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                targetAsset = "windows-x64.zip";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                targetAsset = arch == Architecture.Arm64 ? "linux-arm64.tar.gz" : "linux-x64.AppImage";
+            }
+
+            if (string.IsNullOrWhiteSpace(targetAsset))
+            {
+                Logger.Warning("Update", "Unsupported OS for auto-download, opening releases page");
+                BrowserOpenURL(releasesPage);
+                return false;
+            }
+
+            string? downloadUrl = null;
+            string? assetName = null;
             foreach (var asset in assets.EnumerateArray())
             {
                 var name = asset.GetProperty("name").GetString();
-                if (!string.IsNullOrWhiteSpace(name) && name.Contains("macos-arm64.dmg", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(name) && name.Contains(targetAsset, StringComparison.OrdinalIgnoreCase))
                 {
-                    dmgUrl = asset.GetProperty("browser_download_url").GetString();
+                    downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                    assetName = name;
                     break;
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(dmgUrl))
+            if (string.IsNullOrWhiteSpace(downloadUrl) || string.IsNullOrWhiteSpace(assetName))
             {
-                Logger.Error("Update", "Could not find macOS arm64 DMG in latest release; opening releases page");
-                BrowserOpenURL("https://github.com/yyyumeniku/HyPrism/releases/latest");
+                Logger.Error("Update", "Could not find matching asset in latest release; opening releases page");
+                BrowserOpenURL(releasesPage);
                 return false;
             }
 
             var downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
             Directory.CreateDirectory(downloadsDir);
-            var dmgPath = Path.Combine(downloadsDir, "HyPrism-latest.dmg");
+            var targetPath = Path.Combine(downloadsDir, assetName);
 
-            Logger.Info("Update", $"Downloading latest DMG to {dmgPath}");
-            using (var response = await HttpClient.GetAsync(dmgUrl, HttpCompletionOption.ResponseHeadersRead))
+            Logger.Info("Update", $"Downloading latest launcher to {targetPath}");
+            using (var response = await HttpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();
                 await using var stream = await response.Content.ReadAsStreamAsync();
-                await using var file = new FileStream(dmgPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                await using var file = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
                 var buffer = new byte[8192];
                 int read;
                 while ((read = await stream.ReadAsync(buffer)) > 0)
@@ -1970,29 +1990,32 @@ public class AppService : IDisposable
                 }
             }
 
-            // Remove old app bundle if it exists
-            var appPath = "/Applications/HyPrism.app";
-            if (Directory.Exists(appPath))
+            // Platform-specific post-step
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                try
+                var appPath = "/Applications/HyPrism.app";
+                if (Directory.Exists(appPath))
                 {
-                    Logger.Warning("Update", "Removing existing /Applications/HyPrism.app");
-                    Directory.Delete(appPath, recursive: true);
+                    try
+                    {
+                        Logger.Warning("Update", "Removing existing /Applications/HyPrism.app");
+                        Directory.Delete(appPath, recursive: true);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        Logger.Warning("Update", $"Failed to delete old app: {deleteEx.Message}");
+                    }
                 }
-                catch (Exception deleteEx)
-                {
-                    Logger.Warning("Update", $"Failed to delete old app: {deleteEx.Message}");
-                }
-            }
 
-            // Open the DMG so the user can drag the new app in
-            try
-            {
-                Process.Start("open", dmgPath);
+                try { Process.Start("open", targetPath); } catch (Exception openEx) { Logger.Warning("Update", $"Could not open DMG: {openEx.Message}"); }
             }
-            catch (Exception openEx)
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                Logger.Warning("Update", $"Could not open DMG automatically: {openEx.Message}");
+                try { Process.Start("explorer.exe", $"/select,\"{targetPath}\""); } catch (Exception openEx) { Logger.Warning("Update", $"Could not open Explorer: {openEx.Message}"); }
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                try { Process.Start("xdg-open", targetPath); } catch (Exception openEx) { Logger.Warning("Update", $"Could not open file manager: {openEx.Message}"); }
             }
 
             return true;
@@ -2000,7 +2023,7 @@ public class AppService : IDisposable
         catch (Exception ex)
         {
             Logger.Error("Update", $"Update failed: {ex.Message}");
-            BrowserOpenURL("https://github.com/yyyumeniku/HyPrism/releases/latest");
+            BrowserOpenURL(releasesPage);
             return false;
         }
     }
