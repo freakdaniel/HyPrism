@@ -10,6 +10,7 @@ export enum Language {
     JAPANESE = 'ja',
     KOREAN = 'ko',
     UKRAINIAN = 'uk',
+    BELARUSIAN = 'be',
 }
 
 export enum GameBranch {
