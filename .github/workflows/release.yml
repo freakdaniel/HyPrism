@@ -53,11 +53,17 @@ jobs:
         run: |
           dotnet restore
           dotnet publish -c Release -r linux-x64 --self-contained true \
+            /p:PublishSingleFile=true /p:PublishReadyToRun=true \
+            /p:IncludeNativeLibrariesForSelfExtract=true \
+            /p:IncludeAllContentForSelfExtract=true \
             -o artifacts/linux-x64
 
       - name: Build Linux arm64
         run: |
           dotnet publish -c Release -r linux-arm64 --self-contained true \
+            /p:PublishSingleFile=true /p:PublishReadyToRun=true \
+            /p:IncludeNativeLibrariesForSelfExtract=true \
+            /p:IncludeAllContentForSelfExtract=true \
             -o artifacts/linux-arm64
 
       - name: Create tar.gz archives
@@ -139,11 +145,16 @@ jobs:
         run: |
           dotnet restore
           dotnet publish -c Release -r win-x64 --self-contained true `
+            /p:PublishSingleFile=true /p:PublishReadyToRun=true `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            /p:IncludeAllContentForSelfExtract=true `
+            /p:OutputType=WinExe /p:ApplicationManifest=app.manifest `
             -o artifacts/win-x64
 
       - name: Create Windows zip
         run: |
-          Compress-Archive -Path artifacts/win-x64/* -DestinationPath artifacts/HyPrism-windows-x64.zip
+          # Only include HyPrism.exe in the release zip
+          Compress-Archive -Path artifacts/win-x64/HyPrism.exe -DestinationPath artifacts/HyPrism-windows-x64.zip
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -175,6 +186,9 @@ jobs:
       - name: Build macOS arm64
         run: |
           dotnet publish -c Release -r osx-arm64 --self-contained true \
+            /p:PublishSingleFile=true /p:PublishReadyToRun=true \
+            /p:IncludeNativeLibrariesForSelfExtract=true \
+            /p:IncludeAllContentForSelfExtract=true \
             -o artifacts/osx-arm64
 
       - name: Create macOS app bundle (arm64 only)
