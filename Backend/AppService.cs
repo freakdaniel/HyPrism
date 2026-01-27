@@ -179,6 +179,17 @@ public class AppService : IDisposable
 
     private static void SafeCopyDirectory(string sourceDir, string destDir)
     {
+        // CRITICAL: Prevent copying into itself (causes infinite loop)
+        var normalizedSource = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar);
+        var normalizedDest = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar);
+        
+        if (normalizedSource.Equals(normalizedDest, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (normalizedDest.StartsWith(normalizedSource + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (normalizedSource.StartsWith(normalizedDest + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return;
+            
         Directory.CreateDirectory(destDir);
 
         foreach (var file in Directory.GetFiles(sourceDir))
@@ -584,12 +595,39 @@ public class AppService : IDisposable
         try
         {
             var newInstanceRoot = GetInstanceRoot();
+            
+            // CRITICAL: Prevent migration if source IS the destination (would cause infinite loop)
+            var normalizedSource = Path.GetFullPath(legacyInstanceRoot).TrimEnd(Path.DirectorySeparatorChar);
+            var normalizedDest = Path.GetFullPath(newInstanceRoot).TrimEnd(Path.DirectorySeparatorChar);
+            if (normalizedSource.Equals(normalizedDest, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Info("Migrate", "Skipping migration - source equals destination");
+                return;
+            }
+            
+            // CRITICAL: Prevent migration if source is inside destination (would cause infinite loop)
+            if (normalizedSource.StartsWith(normalizedDest + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Info("Migrate", "Skipping migration - source is inside destination");
+                return;
+            }
+            
             Logger.Info("Migrate", $"Copying legacy instances from {legacyInstanceRoot} to {newInstanceRoot}");
 
             foreach (var legacyDir in Directory.GetDirectories(legacyInstanceRoot))
             {
                 var folderName = Path.GetFileName(legacyDir);
                 if (string.IsNullOrEmpty(folderName)) continue;
+                
+                // CRITICAL: Skip folders that are already branch names (new structure)
+                // These indicate we're looking at already-migrated data
+                var normalizedFolderName = folderName.ToLowerInvariant();
+                if (normalizedFolderName == "release" || normalizedFolderName == "pre-release" || 
+                    normalizedFolderName == "prerelease" || normalizedFolderName == "latest")
+                {
+                    Logger.Info("Migrate", $"Skipping {folderName} - already in new structure format");
+                    continue;
+                }
 
                 // Parse legacy naming: "release-v5" or "release-5" or "release/5"
                 string branch;
@@ -617,9 +655,9 @@ public class AppService : IDisposable
                 }
                 else
                 {
-                    // Assume it's a branch name with no version
-                    branch = folderName;
-                    versionSegment = "latest";
+                    // Unknown format - skip to be safe (could be new structure subfolder)
+                    Logger.Info("Migrate", $"Skipping {folderName} - unknown format, may be new structure");
+                    continue;
                 }
 
                 // Normalize branch name
@@ -628,6 +666,17 @@ public class AppService : IDisposable
                 // Create target path in new structure: instance/release/5
                 var targetBranch = Path.Combine(newInstanceRoot, branch);
                 var targetVersion = Path.Combine(targetBranch, versionSegment);
+                
+                // CRITICAL: Ensure we're not copying a folder into itself
+                var normalizedLegacy = Path.GetFullPath(legacyDir).TrimEnd(Path.DirectorySeparatorChar);
+                var normalizedTarget = Path.GetFullPath(targetVersion).TrimEnd(Path.DirectorySeparatorChar);
+                if (normalizedLegacy.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedTarget.StartsWith(normalizedLegacy + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedLegacy.StartsWith(normalizedTarget + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Info("Migrate", $"Skipping {folderName} - would cause recursive copy");
+                    continue;
+                }
 
                 // Skip if already exists in new location
                 if (Directory.Exists(targetVersion) && IsClientPresent(targetVersion))
