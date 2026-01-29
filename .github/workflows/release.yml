@@ -216,14 +216,45 @@ jobs:
           name: linux-publish
           path: .
 
-      - name: Verify linux publish artifact ⚠️
+      - name: Normalize and verify linux publish artifact ⚠️
         run: |
-          if [ ! -d "artifacts/linux-x64" ] || [ "$(ls -A artifacts/linux-x64 | wc -c)" -eq 0 ]; then
+          set -euo pipefail
+          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
+
+          FOUND=""
+          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found artifacts/linux-x64"
+            FOUND="artifacts/linux-x64"
+          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found linux-x64 at top-level; moving to artifacts/"
+            mkdir -p artifacts
+            mv linux-x64 artifacts/
+            FOUND="artifacts/linux-x64"
+          elif [ -f "HyPrism" ]; then
+            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
+            mkdir -p artifacts/linux-x64
+            mv HyPrism* artifacts/linux-x64/ || true
+            FOUND="artifacts/linux-x64"
+          else
+            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
+            if [ -n "$LOC" ]; then
+              DIR=$(dirname "$LOC")
+              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
+              mkdir -p artifacts/linux-x64
+              cp -R "$DIR"/* artifacts/linux-x64/
+              FOUND="artifacts/linux-x64"
+            fi
+          fi
+
+          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
             echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Available artifacts:"; ls -la artifacts || true
+            echo "Workspace listing:"; ls -la | sed -n '1,200p'
             exit 1
           fi
-          echo "linux-publish artifact present and contains:"; ls -la artifacts/linux-x64 | sed -n '1,200p'
+
+          echo "Normalized artifact directory: $FOUND"
+          ls -la "$FOUND" | sed -n '1,200p'
+          chmod +x "$FOUND"/HyPrism || true
 
       - name: Install appimagetool
         run: |
@@ -269,14 +300,45 @@ jobs:
           name: linux-publish
           path: .
 
-      - name: Verify linux publish artifact ⚠️
+      - name: Normalize and verify linux publish artifact ⚠️
         run: |
-          if [ ! -d "artifacts/linux-x64" ] || [ "$(ls -A artifacts/linux-x64 | wc -c)" -eq 0 ]; then
+          set -euo pipefail
+          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
+
+          FOUND=""
+          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found artifacts/linux-x64"
+            FOUND="artifacts/linux-x64"
+          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found linux-x64 at top-level; moving to artifacts/"
+            mkdir -p artifacts
+            mv linux-x64 artifacts/
+            FOUND="artifacts/linux-x64"
+          elif [ -f "HyPrism" ]; then
+            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
+            mkdir -p artifacts/linux-x64
+            mv HyPrism* artifacts/linux-x64/ || true
+            FOUND="artifacts/linux-x64"
+          else
+            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
+            if [ -n "$LOC" ]; then
+              DIR=$(dirname "$LOC")
+              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
+              mkdir -p artifacts/linux-x64
+              cp -R "$DIR"/* artifacts/linux-x64/
+              FOUND="artifacts/linux-x64"
+            fi
+          fi
+
+          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
             echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Available artifacts:"; ls -la artifacts || true
+            echo "Workspace listing:"; ls -la | sed -n '1,200p'
             exit 1
           fi
-          echo "linux-publish artifact present and contains:"; ls -la artifacts/linux-x64 | sed -n '1,200p'
+
+          echo "Normalized artifact directory: $FOUND"
+          ls -la "$FOUND" | sed -n '1,200p'
+          chmod +x "$FOUND"/HyPrism || true
 
       - name: Build Flatpak
         run: |
@@ -321,14 +383,45 @@ jobs:
           name: linux-publish
           path: .
 
-      - name: Verify linux publish artifact ⚠️
+      - name: Normalize and verify linux publish artifact ⚠️
         run: |
-          if [ ! -d "artifacts/linux-x64" ] || [ "$(ls -A artifacts/linux-x64 | wc -c)" -eq 0 ]; then
+          set -euo pipefail
+          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
+
+          FOUND=""
+          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found artifacts/linux-x64"
+            FOUND="artifacts/linux-x64"
+          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
+            echo "Found linux-x64 at top-level; moving to artifacts/"
+            mkdir -p artifacts
+            mv linux-x64 artifacts/
+            FOUND="artifacts/linux-x64"
+          elif [ -f "HyPrism" ]; then
+            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
+            mkdir -p artifacts/linux-x64
+            mv HyPrism* artifacts/linux-x64/ || true
+            FOUND="artifacts/linux-x64"
+          else
+            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
+            if [ -n "$LOC" ]; then
+              DIR=$(dirname "$LOC")
+              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
+              mkdir -p artifacts/linux-x64
+              cp -R "$DIR"/* artifacts/linux-x64/
+              FOUND="artifacts/linux-x64"
+            fi
+          fi
+
+          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
             echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Available artifacts:"; ls -la artifacts || true
+            echo "Workspace listing:"; ls -la | sed -n '1,200p'
             exit 1
           fi
-          echo "linux-publish artifact present and contains:"; ls -la artifacts/linux-x64 | sed -n '1,200p'
+
+          echo "Normalized artifact directory: $FOUND"
+          ls -la "$FOUND" | sed -n '1,200p'
+          chmod +x "$FOUND"/HyPrism || true
 
       - name: Install packaging tools
         run: |
