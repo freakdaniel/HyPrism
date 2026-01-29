@@ -20,33 +20,35 @@
   ],
   "modules": [
     {
-      "name": "webkit2gtk-4.0",
-      "buildsystem": "cmake-ninja",
-      "config-opts": [
-          "-DCMAKE_BUILD_TYPE=Release",
-          "-DPORT=GTK",
-          "-DENABLE_WEBDRIVER=OFF",
-          "-DUSE_LIBBACKTRACE=OFF",
-          "-DUSE_GTK4=OFF",
-          "-DENABLE_BUBBLEWRAP_SANDBOX=OFF",
-          "-DENABLE_DOCUMENTATION=OFF",
-          "-DUSE_SOUP2=ON",
-          "-DENABLE_MINIBROWSER=OFF",
-          "-DUSE_LIBSECRET=OFF",
-          "-DENABLE_GAMEPAD=OFF",
-          "-DUSE_JPEGXL=OFF",
-          "-DUSE_WOFF2=OFF",
-          "-DUSE_AVIF=OFF",
-          "-DENABLE_SPELLCHECK=OFF"
-      ],
-      "sources": [
-          {
-              "type": "archive",
-              "url": "https://webkitgtk.org/releases/webkitgtk-2.44.0.tar.xz",
-              "sha256": "c66530e41ba59b1edba4ee89ef20b2188e273bed0497e95084729e3cfbe30c87"
-          }
-      ]
-  },
+        "name": "webkit2gtk-4.0",
+        "buildsystem": "cmake-ninja",
+        "config-opts": [
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DPORT=GTK",
+            "-DENABLE_BUBBLEWRAP_SANDBOX=OFF",
+            "-DENABLE_DOCUMENTATION=OFF",
+            "-DUSE_SOUP2=ON",
+            "-DUSE_GTK4=OFF",
+            "-DUSE_LIBBACKTRACE=OFF",
+            "-DENABLE_MINIBROWSER=OFF",
+            "-DENABLE_WEBDRIVER=OFF",
+            "-DENABLE_GAMEPAD=ON",
+            "-DUSE_JPEGXL=OFF"
+        ],
+        "sources": [
+            {
+                "type": "archive",
+                "url": "https://webkitgtk.org/releases/webkitgtk-2.44.2.tar.xz",
+                "sha256": "523f42c8ff24832add17631f6eaafe8f9303afe316ef1a7e1844b952a7f7521b",
+                "x-checker-data": {
+                    "type": "html",
+                    "url": "https://webkitgtk.org/releases/",
+                    "version-pattern": "LATEST-STABLE-(\\d[\\.\\d]+\\d)",
+                    "url-template": "https://webkitgtk.org/releases/webkitgtk-$version.tar.xz"
+                }
+            }
+        ]
+    },
     {
       "name": "HyPrism",
       "buildsystem": "simple",
