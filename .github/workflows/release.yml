@@ -358,11 +358,25 @@ jobs:
           fi
 
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+          sudo apt-get install -y flatpak flatpak-builder || true
 
-          # Build the Flatpak repo and create a single bundle file
-          flatpak-builder --force-clean --repo=repo builddir packaging/flatpak/dev.hyprism.HyPrism.json
+          # Use user-mode remotes to avoid system ConfigureRemote permission errors on runners
+          echo "Listing current flatpak remotes (system):"; flatpak remotes || true
+          echo "Listing current flatpak remotes (user):"; flatpak --user remotes || true
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+          echo "After adding (user) remote:"; flatpak --user remotes || true
+
+          # Try to ensure the required SDK is installed (user scope). If it is missing, attempt install.
+          SDK_NAME="org.freedesktop.Sdk"
+          SDK_VER="25.08"
+          if ! flatpak --user info "$SDK_NAME"//"$SDK_VER" >/dev/null 2>&1; then
+            echo "SDK $SDK_NAME/$SDK_VER not found in user scope; attempting user install from flathub (may require network)"
+            flatpak --user install -y flathub "$SDK_NAME"//"$SDK_VER" || true
+          fi
+          echo "Installed user flatpak runtimes:"; flatpak --user list || true
+
+          # Build the Flatpak repo and create a single bundle file (use --user so flatpak-builder doesn't require system permissions)
+          flatpak-builder --force-clean --repo=repo --user builddir packaging/flatpak/dev.hyprism.HyPrism.json || true
           flatpak build-bundle repo artifacts/HyPrism.flatpak dev.hyprism.HyPrism || true
 
       - name: Upload Flatpak artifact
