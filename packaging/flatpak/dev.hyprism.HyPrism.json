@@ -23,19 +23,30 @@
       "name": "webkit2gtk-4.0",
       "buildsystem": "cmake-ninja",
       "config-opts": [
-          "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+          "-DCMAKE_BUILD_TYPE=Release",
           "-DPORT=GTK",
+          "-DENABLE_WEBDRIVER=OFF",
+          "-DUSE_LIBBACKTRACE=OFF",
+          "-DUSE_GTK4=OFF",
           "-DENABLE_BUBBLEWRAP_SANDBOX=OFF",
           "-DENABLE_DOCUMENTATION=OFF",
           "-DUSE_SOUP2=ON",
-          "-DUSE_GTK4=OFF",
-          "-DUSE_LIBBACKTRACE=OFF",
           "-DENABLE_MINIBROWSER=OFF",
-          "-DENABLE_WEBDRIVER=OFF",
+          "-DUSE_LIBSECRET=OFF",
           "-DENABLE_GAMEPAD=OFF",
-          "-DUSE_JPEGXL=OFF"
+          "-DUSE_JPEGXL=OFF",
+          "-DUSE_WOFF2=OFF",
+          "-DUSE_AVIF=OFF",
+          "-DENABLE_SPELLCHECK=OFF"
+      ],
+      "sources": [
+          {
+              "type": "archive",
+              "url": "https://webkitgtk.org/releases/webkitgtk-2.44.0.tar.xz",
+              "sha256": "c66530e41ba59b1edba4ee89ef20b2188e273bed0497e95084729e3cfbe30c87"
+          }
       ]
-    },
+  },
     {
       "name": "HyPrism",
       "buildsystem": "simple",
@@ -44,8 +55,7 @@
         "install -Dm755 bundle/HyPrism /app/lib/hyprism/HyPrism",
         "cp -R bundle/wwwroot /app/lib/hyprism/ 2>/dev/null || true",
         "cp -R bundle/runtimes /app/lib/hyprism/ 2>/dev/null || true",
-        "install -Dm644 bundle/jre.json /app/lib/hyprism/jre.json 2>/dev/null || true",
-        "ln -sf /app/lib/hyprism/HyPrism /app/bin/HyPrism",
+        "install -Dm644 bundle/jre.json /app/lib/hyprism/jre.json 2>/dev/null || true",          "install -d /app/bin",        "ln -sf /app/lib/hyprism/HyPrism /app/bin/HyPrism",
         "install -Dm644 dev.hyprism.HyPrism.png /app/share/icons/hicolor/256x256/apps/dev.hyprism.HyPrism.png",
         "install -Dm644 dev.hyprism.HyPrism.desktop /app/share/applications/dev.hyprism.HyPrism.desktop",
         "install -Dm644 dev.hyprism.HyPrism.metainfo.xml /app/share/metainfo/dev.hyprism.HyPrism.metainfo.xml"
