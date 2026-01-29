@@ -5,8 +5,7 @@
   "sdk": "org.freedesktop.Sdk",
   "sdk-extensions": [
     "org.freedesktop.Sdk.Extension.golang",
-    "org.freedesktop.Sdk.Extension.node22",
-    "org.freedesktop.Sdk.Extension.ruby"
+    "org.freedesktop.Sdk.Extension.node22"
   ],
   "command": "HyPrism",
   "finish-args": [
@@ -19,6 +18,23 @@
     "--talk-name=org.freedesktop.Notifications"
   ],
   "modules": [
+    {
+      "name": "ruby",
+      "buildsystem": "simple",
+      "build-commands": [
+        "set -ex",
+        "# Configure and build Ruby into /app so it is available during subsequent module builds",
+        "./configure --prefix=/app --disable-install-doc --enable-shared",
+        "make -j$(nproc)",
+        "make install"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.2.tar.gz"
+        }
+      ]
+    },
     {
         "name": "webkit2gtk-4.0",
         "buildsystem": "cmake-ninja",
