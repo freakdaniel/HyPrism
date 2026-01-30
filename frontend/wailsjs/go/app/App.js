@@ -91,6 +91,14 @@ export function CheckLatestNeedsUpdate(branch) {
     return callBackend('CheckLatestNeedsUpdate', branch);
 }
 
+export function GetPendingUpdateInfo(branch) {
+    return callBackend('GetPendingUpdateInfo', branch);
+}
+
+export function CopyUserData(branch, fromVersion, toVersion) {
+    return callBackend('CopyUserData', branch, fromVersion, toVersion);
+}
+
 export function CheckModUpdates() {
     return callBackend('CheckModUpdates');
 }
@@ -103,8 +111,12 @@ export function CheckVersionAvailability() {
     return callBackend('CheckVersionAvailability');
 }
 
-export function DeleteGame() {
-    return callBackend('DeleteGame');
+export function CancelDownload() {
+    return callBackend('CancelDownload');
+}
+
+export function DeleteGame(branch, version) {
+    return callBackend('DeleteGame', branch, version);
 }
 
 export function DownloadAndLaunch(version) {
@@ -159,6 +171,14 @@ export function GetGamePath() {
     return callBackend('GetGamePath');
 }
 
+export function HasAssetsZip(branch, version) {
+    return callBackend('HasAssetsZip', branch, version);
+}
+
+export function GetAssetsZipPath(branch, version) {
+    return callBackend('GetAssetsZipPath', branch, version);
+}
+
 export function GetInstalledMods() {
     return callBackend('GetInstalledMods');
 }
@@ -209,6 +229,10 @@ export function GetNick() {
 
 export function GetUUID() {
     return callBackend('GetUUID');
+}
+
+export function GetAvatarPreview() {
+    return callBackend('GetAvatarPreview');
 }
 
 export function SetUUID(uuid) {
@@ -315,12 +339,33 @@ export function SelectInstanceDirectory() {
     return callBackend('SelectInstanceDirectory');
 }
 
+export function BrowseFolder(initialPath) {
+    return callBackend('BrowseFolder', initialPath || null);
+}
+
 export function SetInstanceDirectory(path) {
     return callBackend('SetInstanceDirectory', path);
 }
 
 export function SetAuthDomain(domain) {
     return callBackend('SetAuthDomain', domain);
+}
+
+// Skin configuration
+export function GetSkinConfig() {
+    return callBackend('GetSkinConfig');
+}
+
+export function SaveSkinConfig(config) {
+    return callBackend('SaveSkinConfig', config);
+}
+
+export function GetInstanceSkinConfig(branch, version) {
+    return callBackend('GetInstanceSkinConfig', branch, version);
+}
+
+export function ApplySkinToInstance(branch, version) {
+    return callBackend('ApplySkinToInstance', branch, version);
 }
 
 export function SetAutoUpdateLatest(enabled) {
@@ -373,4 +418,111 @@ export function UninstallMod(modId) {
 
 export function Update() {
     return callBackend('Update');
+}
+
+export function GetLauncherBranch() {
+    return callBackend('GetLauncherBranch');
+}
+
+export function SetLauncherBranch(branch) {
+    return callBackend('SetLauncherBranch', branch);
+}
+
+export function CheckRosettaStatus() {
+    return callBackend('CheckRosettaStatus');
+}
+
+export function GetCloseAfterLaunch() {
+    return callBackend('GetCloseAfterLaunch');
+}
+
+export function SetCloseAfterLaunch(enabled) {
+    return callBackend('SetCloseAfterLaunch', enabled);
+}
+
+export function GetShowDiscordAnnouncements() {
+    return callBackend('GetShowDiscordAnnouncements');
+}
+
+export function SetShowDiscordAnnouncements(enabled) {
+    return callBackend('SetShowDiscordAnnouncements', enabled);
+}
+
+export function DismissAnnouncement(announcementId) {
+    return callBackend('DismissAnnouncement', announcementId);
+}
+
+export function ReactToAnnouncement(messageId, emoji) {
+    return callBackend('ReactToAnnouncement', messageId, emoji);
+}
+
+export function GetDiscordAnnouncement() {
+    return callBackend('GetDiscordAnnouncement');
+}
+export function OpenLauncherFolder() {
+    return callBackend('OpenLauncherFolder');
+}
+
+export function DeleteLauncherData() {
+    return callBackend('DeleteLauncherData');
+}
+
+export function GetLauncherFolderPath() {
+    return callBackend('GetLauncherFolderPath');
+}
+
+export function GetTestAnnouncement() {
+    return callBackend('GetTestAnnouncement');
+}
+
+// News settings
+export function GetDisableNews() {
+    return callBackend('GetDisableNews');
+}
+
+export function SetDisableNews(disabled) {
+    return callBackend('SetDisableNews', disabled);
+}
+
+// Background settings
+export function GetBackgroundMode() {
+    return callBackend('GetBackgroundMode');
+}
+
+export function SetBackgroundMode(mode) {
+    return callBackend('SetBackgroundMode', mode);
+}
+
+export function GetAvailableBackgrounds() {
+    return callBackend('GetAvailableBackgrounds');
+}
+
+// Accent color settings
+export function GetAccentColor() {
+    return callBackend('GetAccentColor');
+}
+
+export function SetAccentColor(color) {
+    return callBackend('SetAccentColor', color);
+}
+
+// Launcher Data Directory
+export function GetLauncherDataDirectory() {
+    return callBackend('GetLauncherDataDirectory');
+}
+
+export function SetLauncherDataDirectory(path) {
+    return callBackend('SetLauncherDataDirectory', path);
+}
+
+export function GetDisableHardwareAcceleration() {
+    return callBackend('GetDisableHardwareAcceleration');
+}
+
+export function SetDisableHardwareAcceleration(disabled) {
+    return callBackend('SetDisableHardwareAcceleration', disabled);
+}
+
+export function WindowClose() {
+    return callBackend('WindowClose');
 }

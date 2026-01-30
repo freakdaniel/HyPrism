@@ -37,6 +37,11 @@ frontend/package-lock.json
 frontend/yarn.lock
 frontend/pnpm-lock.yaml
 
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
+
 # Frontend cache
 frontend/.vite/
 frontend/.turbo/
@@ -90,3 +95,11 @@ scripts/run.sh
 artifacts/
 dmg-arm64/Applications
 scripts/build-linux-all-ubuntu.sh
+# Python debug scripts
+*.py
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/

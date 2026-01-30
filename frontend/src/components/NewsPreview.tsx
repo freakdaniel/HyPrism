@@ -1,7 +1,8 @@
 import { Calendar, RefreshCw, User, ChevronDown, ChevronUp, Newspaper } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 interface NewsItem {
     title: string;
@@ -19,18 +20,25 @@ interface NewsPreviewProps {
 
 type NewsFilter = 'all' | 'hytale' | 'hyprism';
 
-export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
+export const NewsPreview: React.FC<NewsPreviewProps> = memo(({ getNews }) => {
     const { t } = useTranslation();
+    const { accentColor } = useAccentColor();
     const [news, setNews] = useState<NewsItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [limit, setLimit] = useState(6);
     const [filter, setFilter] = useState<NewsFilter>('all');
     const [isMinimized, setIsMinimized] = useState(false);
     const listRef = useRef<HTMLDivElement>(null);
 
-    const fetchNews = async (count: number, reset = false) => {
-        setLoading(true);
+    const fetchNews = useCallback(async (count: number, reset = false) => {
+        // Only show initial loading spinner if we have no news yet
+        if (news.length === 0) {
+            setInitialLoading(true);
+        } else {
+            setIsRefreshing(true);
+        }
         setError(null);
         try {
             const items = await getNews(count);
@@ -42,57 +50,66 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                 return Array.from(seen.values());
             });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch news');
+            // Only set error if we have no news to show
+            if (news.length === 0) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch news');
+            }
         } finally {
-            setLoading(false);
+            setInitialLoading(false);
+            setIsRefreshing(false);
         }
-    };
+    }, [getNews, news.length]);
 
     useEffect(() => {
         fetchNews(limit, limit === 6 && news.length === 0);
-    }, [limit]);
+    }, [limit, fetchNews]);
 
     useEffect(() => {
         const interval = setInterval(() => {
             fetchNews(limit);
         }, 30000);
         return () => clearInterval(interval);
-    }, [limit]);
+    }, [limit, fetchNews]);
 
-    const openLink = (url: string) => {
+    const openLink = useCallback((url: string) => {
         BrowserOpenURL(url);
-    };
+    }, []);
 
-    const handleScroll = () => {
-        if (!listRef.current || loading) return;
+    const handleScroll = useCallback(() => {
+        // Avoid pagination while loading
+        if (!listRef.current || initialLoading || isRefreshing) return;
         const { scrollTop, scrollHeight, clientHeight } = listRef.current;
         if (scrollHeight - scrollTop - clientHeight < 120) {
             setLimit((prev) => prev + 6);
         }
-    };
+    }, [initialLoading, isRefreshing]);
 
-    // Filter news by source
-    const filteredNews = filter === 'all' 
-        ? news 
-        : news.filter(item => item.source === filter);
+    // Memoize filtered news to avoid recalculating on every render
+    const filteredNews = useMemo(() => 
+        filter === 'all' 
+            ? news 
+            : news.filter(item => item.source === filter),
+        [filter, news]
+    );
 
     return (
-        <div className='flex flex-col gap-y-2 max-w-sm'>
+        <div className='flex flex-col gap-y-2 w-full max-w-[280px] sm:max-w-[320px] md:max-w-[360px] lg:max-w-[400px]'>
             <div className='flex justify-between items-center'>
                 <div className='flex items-center gap-2'>
                     <Newspaper size={18} className='text-white' />
                     <h2 className='text-sm font-bold text-white'>{t('News')}</h2>
                 </div>
-                <div className='flex gap-3 items-center ml-4'>
+                <div className='flex gap-2 sm:gap-3 items-center ml-2 sm:ml-4'>
                     {!isMinimized && (
                         <>
                             <button
                                 onClick={() => setFilter('all')}
                                 className={`px-3 py-1 text-xs rounded-lg transition-all ${
                                     filter === 'all'
-                                        ? 'bg-[#FFA845] text-black font-medium'
+                                        ? 'text-black font-medium'
                                         : 'bg-white/10 text-white/70 hover:bg-white/20'
                                 }`}
+                                style={filter === 'all' ? { backgroundColor: accentColor } : undefined}
                             >
                                 {t('All')}
                             </button>
@@ -100,9 +117,10 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                                 onClick={() => setFilter('hytale')}
                                 className={`px-3 py-1 text-xs rounded-lg transition-all ${
                                     filter === 'hytale'
-                                        ? 'bg-[#FFA845] text-black font-medium'
+                                        ? 'text-black font-medium'
                                         : 'bg-white/10 text-white/70 hover:bg-white/20'
                                 }`}
+                                style={filter === 'hytale' ? { backgroundColor: accentColor } : undefined}
                             >
                                 {t('Hytale')}
                             </button>
@@ -110,9 +128,10 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                                 onClick={() => setFilter('hyprism')}
                                 className={`px-3 py-1 text-xs rounded-lg transition-all ${
                                     filter === 'hyprism'
-                                        ? 'bg-[#FFA845] text-black font-medium'
+                                        ? 'text-black font-medium'
                                         : 'bg-white/10 text-white/70 hover:bg-white/20'
                                 }`}
+                                style={filter === 'hyprism' ? { backgroundColor: accentColor } : undefined}
                             >
                                 {t('HyPrism')}
                             </button>
@@ -129,16 +148,16 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
             </div>
 
             {!isMinimized && (
-                loading ? (
+                initialLoading ? (
                     <div className="flex items-center justify-center py-4">
-                        <RefreshCw size={24} className="text-[#FFA845] animate-spin" />
+                        <RefreshCw size={24} className="animate-spin" style={{ color: accentColor }} />
                     </div>
                 ) : error ? (
                     <div className="flex items-center justify-center py-8">
                         <div className="text-center">
                             <p className="text-red-400 mb-3 text-sm">{error}</p>
                             <button
-                                onClick={fetchNews}
+                                onClick={() => fetchNews(limit, true)}
                                 className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm"
                             >
                                 {t('Try Again')}
@@ -146,13 +165,18 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                         </div>
                     </div>
                 ) : filteredNews.length > 0 ? (
-                    <div ref={listRef} onScroll={handleScroll} className='flex flex-col gap-2 max-h-72 overflow-y-auto pr-1'>
+                    <div ref={listRef} onScroll={handleScroll} className='flex flex-col gap-2 max-h-[240px] sm:max-h-[280px] md:max-h-[320px] overflow-y-auto pr-1 relative'>
+                        {/* Subtle refresh indicator */}
+                        {isRefreshing && (
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
+                                <RefreshCw size={12} className="animate-spin" style={{ color: `${accentColor}80` }} />
+                            </div>
+                        )}
                         {filteredNews.map((item) => (
                             <button
                                 key={item.url + item.title}
                                 onClick={() => openLink(item.url)}
-                                disabled={loading}
-                                className='flex gap-2 group hover:bg-white/5 p-2 rounded-lg transition-all cursor-pointer text-left w-full glass'
+                                className='flex gap-2 group hover:bg-white/5 p-1.5 sm:p-2 rounded-lg transition-all cursor-pointer text-left w-full glass'
                             >
                                 {item.imageUrl && (
                                     <img
@@ -162,7 +186,7 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                                     />
                                 )}
                                 <div className='flex flex-col justify-center min-w-0'>
-                                    <p className='text-[#FFA845] group-hover:underline text-xs font-medium line-clamp-2 mb-0.5'>
+                                    <p className='group-hover:underline text-xs font-medium line-clamp-2 mb-0.5' style={{ color: accentColor }}>
                                         {item.title}
                                     </p>
                                     <p className='text-white/70 text-xs line-clamp-2 mb-1'>{item.excerpt}</p>
@@ -173,14 +197,15 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
                                 </div>
                             </button>
                         ))}
-                        {loading && (
+                        {isRefreshing && (
                             <div className='flex items-center justify-center py-2 text-xs text-white/50'>
                                 <RefreshCw size={12} className='animate-spin' />
                             </div>
                         )}
                         <button
                             onClick={() => openLink("https://hytale.com/news")}
-                            className='w-full font-semibold hover:underline cursor-pointer text-[#FFA845] text-xs mt-0.5'>
+                            className='w-full font-semibold hover:underline cursor-pointer text-xs mt-0.5'
+                            style={{ color: accentColor }}>
                             {t('Read more on hytale.com')} →
                         </button>
                     </div>
@@ -193,4 +218,6 @@ export const NewsPreview: React.FC<NewsPreviewProps> = ({ getNews }) => {
 
         </div>
     );
-};
+});
+
+NewsPreview.displayName = 'NewsPreview';

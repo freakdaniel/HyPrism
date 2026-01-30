@@ -13,6 +13,7 @@ import {
   OpenInstanceModsFolder, CheckInstanceModUpdates
 } from '../../wailsjs/go/app/App';
 import { GameBranch } from '@/constants/enums';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 // Types
 interface Mod {
@@ -90,10 +91,11 @@ const ConfirmModal: React.FC<{
   message: string;
   confirmText: string;
   confirmColor: string;
+  confirmStyle?: React.CSSProperties;
   onConfirm: () => void;
   onCancel: () => void;
   children?: React.ReactNode;
-}> = ({ title, message, confirmText, confirmColor, onConfirm, onCancel, children }) => {
+}> = ({ title, message, confirmText, confirmColor, confirmStyle, onConfirm, onCancel, children }) => {
   const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60">
@@ -108,7 +110,7 @@ const ConfirmModal: React.FC<{
           >
             {t('Cancel')}
           </button>
-          <button onClick={onConfirm} className={`flex-1 py-2 rounded-xl text-white text-sm ${confirmColor}`}>
+          <button onClick={onConfirm} className={`flex-1 py-2 rounded-xl text-white text-sm ${confirmColor}`} style={confirmStyle}>
             {confirmText}
           </button>
         </div>
@@ -139,6 +141,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
   initialSearchQuery = ''
 }) => {
   const { t } = useTranslation();
+  const { accentColor } = useAccentColor();
   // Tab state
   const [activeTab, setActiveTab] = useState<'installed' | 'browse'>(initialSearchQuery ? 'browse' : 'installed');
 
@@ -733,7 +736,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
         <div className="p-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
           {/* Left side - Instance info */}
           <div className="flex items-center gap-3">
-            <Package size={24} className="text-[#FFA845]" />
+            <Package size={24} style={{ color: accentColor }} />
             <h2 className="text-lg font-bold text-white">{t('Mod Manager')} <span className="text-white/50 font-normal">({instanceName})</span></h2>
           </div>
 
@@ -751,9 +754,10 @@ export const ModManager: React.FC<ModManagerProps> = ({
               onClick={(activeTab === 'browse' && selectedBrowseMods.size > 0) || (activeTab === 'installed' && selectedInstalledMods.size > 0) ? showDownloadConfirmation : undefined}
               disabled={isDownloading || !((activeTab === 'browse' && selectedBrowseMods.size > 0) || (activeTab === 'installed' && selectedInstalledMods.size > 0))}
               className={`p-2 rounded-xl ${(activeTab === 'browse' && selectedBrowseMods.size > 0) || (activeTab === 'installed' && selectedInstalledMods.size > 0)
-                ? 'text-[#FFA845] hover:bg-[#FFA845]/10'
+                ? ''
                 : 'text-white/20 cursor-not-allowed'
                 }`}
+              style={(activeTab === 'browse' && selectedBrowseMods.size > 0) || (activeTab === 'installed' && selectedInstalledMods.size > 0) ? { color: accentColor } : undefined}
               title={
                 activeTab === 'browse' && selectedBrowseMods.size > 0
                   ? t(`Download {{count}} mod(s)`).replace('{{count}}', selectedBrowseMods.size.toString())
@@ -801,7 +805,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
               }`}
           >
             {t('Installed Mods')} ({installedMods.length})
-            {activeTab === 'installed' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FFA845]" />}
+            {activeTab === 'installed' && <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: accentColor }} />}
           </button>
           <button
             onClick={() => {
@@ -819,7 +823,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                 {selectedBrowseMods.size}
               </span>
             )}
-            {activeTab === 'browse' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FFA845]" />}
+            {activeTab === 'browse' && <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: accentColor }} />}
           </button>
         </div>
 
@@ -833,7 +837,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                 value={installedSearchQuery}
                 onChange={(e) => setInstalledSearchQuery(e.target.value)}
                 placeholder={t('Search installed mods...')}
-                className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/40 focus:outline-none focus:border-[#FFA845]/50"
+                className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/40 focus:outline-none"
               />
             </div>
           </div>
@@ -849,7 +853,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('Search mods...')}
-                className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/40 focus:outline-none focus:border-[#FFA845]/50"
+                className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/40 focus:outline-none"
               />
             </div>
 
@@ -873,8 +877,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
                       setSelectedCategory(0);
                       setIsCategoryDropdownOpen(false);
                     }}
-                    className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/10 transition-colors ${selectedCategory === 0 ? 'text-[#FFA845] bg-white/5' : 'text-white/70'
+                    className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/10 transition-colors ${selectedCategory === 0 ? 'bg-white/5' : 'text-white/70'
                       }`}
+                    style={selectedCategory === 0 ? { color: accentColor } : undefined}
                   >
                     {t('All Categories')}
                   </button>
@@ -885,8 +890,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
                         setSelectedCategory(cat.id);
                         setIsCategoryDropdownOpen(false);
                       }}
-                      className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/10 transition-colors ${selectedCategory === cat.id ? 'text-[#FFA845] bg-white/5' : 'text-white/70'
+                      className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/10 transition-colors ${selectedCategory === cat.id ? 'bg-white/5' : 'text-white/70'
                         }`}
+                      style={selectedCategory === cat.id ? { color: accentColor } : undefined}
                     >
                       {t(cat.name)}
                     </button>
@@ -920,7 +926,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
               // Installed Mods Tab
               isLoadingInstalled ? (
                 <div className="flex items-center justify-center py-20">
-                  <Loader2 size={32} className="animate-spin text-[#FFA845]" />
+                  <Loader2 size={32} className="animate-spin" style={{ color: accentColor }} />
                 </div>
               ) : filteredInstalledMods.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-white/30">
@@ -938,9 +944,10 @@ export const ModManager: React.FC<ModManagerProps> = ({
                       <div
                         key={mod.id}
                         className={`p-3 rounded-xl border cursor-pointer ${isViewing || isHighlighted
-                          ? 'bg-[#FFA845]/20 border-[#FFA845]'
+                          ? ''
                           : 'bg-white/5 border-white/10 hover:border-white/20'
                           }`}
+                        style={isViewing || isHighlighted ? { backgroundColor: `${accentColor}33`, borderColor: accentColor } : undefined}
                         onClick={(e) => handleModClick(mod, index, e)}
                       >
                         <div className="flex items-center gap-3">
@@ -991,8 +998,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
                               }
                               setLastClickedIndex(index);
                             }}
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-[#FFA845] border-[#FFA845]' : 'bg-transparent border-white/30 hover:border-white/50'
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? '' : 'bg-transparent border-white/30 hover:border-white/50'
                               }`}
+                            style={isSelected ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                             title={isSelected ? t('Selected') : t('Select (Shift+click for range)')}
                           >
                             {isSelected && <Check size={12} className="text-white" />}
@@ -1028,7 +1036,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
               // Browse Mods Tab
               isSearching && searchResults.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
-                  <Loader2 size={32} className="animate-spin text-[#FFA845]" />
+                  <Loader2 size={32} className="animate-spin" style={{ color: accentColor }} />
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-white/40">
@@ -1047,9 +1055,10 @@ export const ModManager: React.FC<ModManagerProps> = ({
                       <div
                         key={mod.id}
                         className={`p-3 rounded-xl border cursor-pointer ${isViewing || isHighlighted
-                          ? 'bg-[#FFA845]/20 border-[#FFA845]'
+                          ? ''
                           : 'bg-white/5 border-white/10 hover:border-white/20'
                           }`}
+                        style={isViewing || isHighlighted ? { backgroundColor: `${accentColor}33`, borderColor: accentColor } : undefined}
                         onClick={(e) => handleModClick(mod, index, e)}
                       >
                         <div className="flex items-center gap-3">
@@ -1109,8 +1118,9 @@ export const ModManager: React.FC<ModManagerProps> = ({
                               }
                               setLastClickedIndex(index);
                             }}
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0  ${isSelected ? 'bg-[#FFA845] border-[#FFA845]' : 'bg-transparent border-white/30 hover:border-white/50'
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? '' : 'bg-transparent border-white/30 hover:border-white/50'
                               }`}
+                            style={isSelected ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                             title={isSelected ? t('Selected for download') : t('Select for download (Shift+click for range)')}
                           >
                             {isSelected && <Check size={12} className="text-white" />}
@@ -1135,7 +1145,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                                     BrowserOpenURL(`https://www.curseforge.com/hytale/mods/${mod.slug}`);
                                   }
                                 }}
-                                className="text-white font-medium truncate hover:text-[#FFA845]  text-left"
+                                className="text-white font-medium truncate text-left hover:opacity-80"
                               >
                                 {mod.name}
                               </button>
@@ -1161,7 +1171,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
 
                   {isLoadingMore && (
                     <div className="flex justify-center py-4">
-                      <Loader2 size={24} className="animate-spin text-[#FFA845]" />
+                      <Loader2 size={24} className="animate-spin" style={{ color: accentColor }} />
                     </div>
                   )}
                 </div>
@@ -1192,7 +1202,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                           BrowserOpenURL(`https://www.curseforge.com/hytale/mods/${slug}`);
                         }
                       }}
-                      className="text-lg font-bold text-white truncate hover:text-[#FFA845] text-left block w-full"
+                      className="text-lg font-bold text-white truncate hover:opacity-80 text-left block w-full"
                     >
                       {selectedMod.name}
                     </button>
@@ -1222,7 +1232,8 @@ export const ModManager: React.FC<ModManagerProps> = ({
                             url: screenshots[activeScreenshot]?.url,
                             title: screenshots[activeScreenshot]?.title || ''
                           })}
-                          className="w-full h-40 rounded-xl overflow-hidden bg-black/30 cursor-pointer hover:ring-2 hover:ring-[#FFA845]/50 transition-all"
+                          className="w-full h-40 rounded-xl overflow-hidden bg-black/30 cursor-pointer hover:ring-2 transition-all"
+                          style={{ '--tw-ring-color': `${accentColor}80` } as React.CSSProperties}
                           title={t('Click to view full image')}
                         >
                           <img
@@ -1246,7 +1257,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
                               <ChevronRight size={16} />
                             </button>
                             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                              {screenshots.map((_, i) => (
+                              {screenshots.map((_: unknown, i: number) => (
                                 <button
                                   key={i}
                                   onClick={() => setActiveScreenshot(i)}
@@ -1347,9 +1358,10 @@ export const ModManager: React.FC<ModManagerProps> = ({
                         }
                       }}
                       className={`w-full py-3 rounded-xl text-sm font-medium ${selectedInstalledMods.has((selectedMod as Mod).id) || highlightedInstalledMods.size > 0
-                        ? 'bg-[#FFA845] text-white'
+                        ? 'text-white'
                         : 'bg-white/10 text-white hover:bg-white/20'
                         }`}
+                      style={selectedInstalledMods.has((selectedMod as Mod).id) || highlightedInstalledMods.size > 0 ? { backgroundColor: accentColor } : undefined}
                     >
                       {highlightedInstalledMods.size > 0
                         ? (() => {
@@ -1419,9 +1431,10 @@ export const ModManager: React.FC<ModManagerProps> = ({
                         }
                       }}
                       className={`w-full py-3 rounded-xl text-sm font-medium ${selectedBrowseMods.has((selectedMod as CurseForgeMod).id) || highlightedBrowseMods.size > 0
-                        ? 'bg-[#FFA845] text-white'
+                        ? 'text-white'
                         : 'bg-white/10 text-white hover:bg-white/20'
                         }`}
+                      style={selectedBrowseMods.has((selectedMod as CurseForgeMod).id) || highlightedBrowseMods.size > 0 ? { backgroundColor: accentColor } : undefined}
                     >
                       {highlightedBrowseMods.size > 0
                         ? (() => {
@@ -1476,7 +1489,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
             <div className="p-4 max-h-80 overflow-y-auto">
               {isLoadingUpdates ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 size={32} className="animate-spin text-[#FFA845]" />
+                  <Loader2 size={32} className="animate-spin" style={{ color: accentColor }} />
                 </div>
               ) : installedMods.length === 0 ? (
                 <div className="text-center py-8 text-white/50">
@@ -1573,11 +1586,8 @@ export const ModManager: React.FC<ModManagerProps> = ({
               : t('Are you sure you want to delete {{count}} mod(s)? This cannot be undone.').replace('{{count}}', confirmModal.items.length.toString())
           }
           confirmText={confirmModal.type === 'download' ? t('Download') : t('Delete')}
-          confirmColor={
-            confirmModal.type === 'download'
-              ? 'bg-[#FFA845] hover:bg-[#FF9530]'
-              : 'bg-red-500 hover:bg-red-600'
-          }
+          confirmColor={confirmModal.type === 'download' ? 'hover:opacity-90' : 'bg-red-500 hover:bg-red-600'}
+          confirmStyle={confirmModal.type === 'download' ? { backgroundColor: accentColor } : undefined}
           onConfirm={confirmModal.type === 'download' ? handleConfirmDownload : handleConfirmDelete}
           onCancel={() => setConfirmModal(null)}
         >
@@ -1596,7 +1606,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-black/80 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex items-center gap-3 mb-4">
-              <Loader2 size={24} className="animate-spin text-[#FFA845]" />
+              <Loader2 size={24} className="animate-spin" style={{ color: accentColor }} />
               <div>
                 <h3 className="text-white font-semibold">{t('Downloading Mods')}</h3>
                 <p className="text-white/60 text-sm">
@@ -1608,8 +1618,8 @@ export const ModManager: React.FC<ModManagerProps> = ({
             {/* Progress Bar */}
             <div className="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden">
               <div
-                className="bg-[#FFA845] h-full rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${(downloadProgress.current / downloadProgress.total) * 100}%` }}
+                className="h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${(downloadProgress.current / downloadProgress.total) * 100}%`, backgroundColor: accentColor }}
               />
             </div>
 
@@ -1624,7 +1634,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
               {downloadJobs.map((job) => (
                 <div key={String(job.id)} className="flex items-center gap-2 text-white/80 text-sm bg-white/5 rounded-lg px-3 py-2">
                   {job.status === 'success' && <Check size={14} className="text-green-400" />}
-                  {job.status === 'running' && <Loader2 size={14} className="animate-spin text-[#FFA845]" />}
+                  {job.status === 'running' && <Loader2 size={14} className="animate-spin" style={{ color: accentColor }} />}
                   {job.status === 'pending' && <RefreshCw size={14} className="text-white/50" />}
                   {job.status === 'error' && <AlertCircle size={14} className="text-red-400" />}
                   <div className="flex-1 truncate">{job.name}</div>

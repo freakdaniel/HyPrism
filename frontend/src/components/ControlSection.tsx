@@ -1,10 +1,33 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Play, Package, Square, Github, Bug, GitBranch, Loader2, Download, ChevronDown, HardDrive, Check, Coffee, X } from 'lucide-react';
+import { FolderOpen, Play, Package, Square, Settings, Loader2, Download, ChevronDown, Check, X, GitBranch } from 'lucide-react';
+import { CoffeeIcon } from './CoffeeIcon';
+import { OnlineToggle } from './OnlineToggle';
+import { LanguageSelector } from './LanguageSelector';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { GameBranch } from '../constants/enums';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
-import { LanguageSelector } from './LanguageSelector';
+// Memoized NavBtn component to prevent unnecessary re-renders
+const NavBtn = memo(({ onClick, icon, tooltip, accentColor }: { onClick?: () => void; icon: React.ReactNode; tooltip?: string; accentColor: string }) => (
+  <button
+    onClick={onClick}
+    className="w-12 h-12 rounded-xl glass border border-white/5 flex items-center justify-center text-white/60 hover:text-[var(--accent)] hover:bg-[var(--accent-bg)] active:scale-95 transition-all duration-150 relative group flex-shrink-0"
+    style={{ 
+      '--accent': accentColor,
+      '--accent-bg': `${accentColor}1a`
+    } as React.CSSProperties}
+  >
+    {icon}
+    {tooltip && (
+      <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+        {tooltip}
+      </span>
+    )}
+  </button>
+));
+
+NavBtn.displayName = 'NavBtn';
 
 interface ControlSectionProps {
   onPlay: () => void;
@@ -29,6 +52,7 @@ interface ControlSectionProps {
   onBranchChange: (branch: string) => void;
   onVersionChange: (version: number) => void;
   onCustomDirChange?: () => void;
+  onOpenSettings?: () => void;
   actions: {
     openFolder: () => void;
     showDelete: () => void;
@@ -36,22 +60,7 @@ interface ControlSectionProps {
   };
 }
 
-const NavBtn: React.FC<{ onClick?: () => void; icon: React.ReactNode; tooltip?: string }> = ({ onClick, icon, tooltip }) => (
-  <button
-    onClick={onClick}
-    className="w-12 h-12 rounded-xl glass border border-white/5 flex items-center justify-center text-white/60 hover:text-[#FFA845] hover:bg-[#FFA845]/10 active:scale-95 transition-all duration-150 relative group flex-shrink-0"
-
-  >
-    {icon}
-    {tooltip && (
-      <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-        {tooltip}
-      </span>
-    )}
-  </button>
-);
-
-export const ControlSection: React.FC<ControlSectionProps> = ({
+export const ControlSection: React.FC<ControlSectionProps> = memo(({
   onPlay,
   onDownload,
   onExit,
@@ -73,7 +82,8 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
   isCheckingInstalled,
   onBranchChange,
   onVersionChange,
-  onCustomDirChange,
+  onCustomDirChange: _onCustomDirChange,
+  onOpenSettings,
   actions
 }) => {
   const [isBranchOpen, setIsBranchOpen] = useState(false);
@@ -81,12 +91,9 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
   const [showCancelButton, setShowCancelButton] = useState(false);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
   const versionDropdownRef = useRef<HTMLDivElement>(null);
-
-
   const { t } = useTranslation();
+  const { accentColor } = useAccentColor();
 
-  const openGitHub = () => BrowserOpenURL('https://github.com/yyyumeniku/HyPrism');
-  const openBugReport = () => BrowserOpenURL('https://github.com/yyyumeniku/HyPrism/issues/new');
   const openCoffee = () => BrowserOpenURL('https://buymeacoffee.com/yyyumeniku');
 
   // Close dropdowns on click outside
@@ -134,8 +141,15 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
       ? t('Pre-Release')
       : t('Release');
 
-  // Calculate width to fit content properly
-  const selectorWidth = 'w-[290px]';
+  // Calculate width to match the 4 nav buttons (w-12 = 48px each, gap-2 = 8px)
+  // 4 buttons * 48px + 3 gaps * 8px = 216px
+  const selectorWidth = 'w-[216px]';
+
+  const versionButtonStyle: React.CSSProperties = {};
+  if (isVersionOpen) {
+    versionButtonStyle.color = accentColor;
+    versionButtonStyle.backgroundColor = `${accentColor}1a`;
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -157,7 +171,6 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
               active:scale-95 transition-all duration-150 rounded-l-xl
               ${isBranchOpen ? 'text-white bg-white/10' : ''}
             `}
-
           >
             <GitBranch size={16} className="text-white/80" />
             <span className="text-sm font-medium">{branchLabel}</span>
@@ -169,12 +182,12 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
 
           {/* Branch Dropdown Menu (opens up) */}
           {isBranchOpen && (
-            <div className="absolute bottom-full left-0 mb-2 z-[100] min-w-[140px] bg-[#1a1a1a] backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/50 overflow-hidden">
+            <div className="absolute bottom-full left-0 mb-2 z-[100] min-w-[140px] bg-[#1a1a1a] backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/50 overflow-hidden p-1">
               {[GameBranch.RELEASE, GameBranch.PRE_RELEASE].map((branch) => (
                 <button
                   key={branch}
                   onClick={() => handleBranchSelect(branch)}
-                  className={`w-full px-3 py-2 flex items-center gap-2 text-sm ${currentBranch === branch
+                  className={`w-full px-3 py-2 flex items-center gap-2 text-sm rounded-lg ${currentBranch === branch
                     ? 'bg-white/20 text-white'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}
@@ -197,15 +210,20 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
               setIsBranchOpen(false);
             }}
             disabled={isLoadingVersions}
-            className={`
-              h-full w-full px-3
-              flex items-center justify-center gap-2
-              text-white/60 hover:text-[#FFA845] hover:bg-[#FFA845]/10
-              disabled:opacity-50 disabled:cursor-not-allowed
-              active:scale-95 transition-all duration-150 rounded-r-xl
-              ${isVersionOpen ? 'text-[#FFA845] bg-[#FFA845]/10' : ''}
-            `}
-
+            className="h-full w-full px-3 flex items-center justify-center gap-2 text-white/60 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all duration-150 rounded-r-xl"
+            style={versionButtonStyle}
+            onMouseEnter={(e) => {
+              if (!isVersionOpen) {
+                e.currentTarget.style.color = accentColor;
+                e.currentTarget.style.backgroundColor = `${accentColor}1a`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isVersionOpen) {
+                e.currentTarget.style.color = '';
+                e.currentTarget.style.backgroundColor = '';
+              }
+            }}
           >
             <span className="text-sm font-medium">
               {isLoadingVersions ? '...' : currentVersion === 0 ? t('latest') : `v${currentVersion}`}
@@ -218,24 +236,25 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
 
           {/* Version Dropdown Menu (opens up) */}
           {isVersionOpen && (
-            <div className="absolute bottom-full right-0 mb-2 z-[100] min-w-[120px] max-h-60 overflow-y-auto bg-[#1a1a1a] backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/50">
+            <div className="absolute bottom-full right-0 mb-2 z-[100] min-w-[120px] max-h-60 overflow-y-auto bg-[#1a1a1a] backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/50 p-1">
               {availableVersions.length > 0 ? (
                 availableVersions.map((version) => {
                   const isInstalled = (installedVersions || []).includes(version);
+                  const isSelected = currentVersion === version;
                   return (
                     <button
                       key={version}
                       onClick={() => handleVersionSelect(version)}
-                      className={`w-full px-3 py-2 flex items-center justify-between gap-2 text-sm ${currentVersion === version
-                        ? 'bg-[#FFA845]/20 text-[#FFA845]'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                        }`}
+                      className={`w-full px-3 py-2 flex items-center justify-between gap-2 text-sm rounded-lg ${
+                        isSelected ? '' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      }`}
+                      style={isSelected ? { backgroundColor: `${accentColor}33`, color: accentColor } : undefined}
                     >
                       <div className="flex items-center gap-2">
-                        {currentVersion === version && (
-                          <Check size={14} className="text-[#FFA845]" strokeWidth={3} />
+                        {isSelected && (
+                          <Check size={14} style={{ color: accentColor }} strokeWidth={3} />
                         )}
-                        <span className={currentVersion === version ? '' : 'ml-[22px]'}>
+                        <span className={isSelected ? '' : 'ml-[22px]'}>
                           {version === 0 ? t('latest') : `v${version}`}
                         </span>
                       </div>
@@ -257,38 +276,32 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
 
       {/* Row 2: Nav buttons */}
       <div className="flex gap-2 items-center flex-wrap">
-        <NavBtn onClick={() => actions.showModManager()} icon={<Package size={18} />} tooltip={t('Mod Manager')} />
-        <NavBtn onClick={actions.openFolder} icon={<FolderOpen size={18} />} tooltip={t('Open Instance Folder')} />
-        <NavBtn
-          onClick={() => {
-            if (onCustomDirChange) {
-              onCustomDirChange();
-            }
-          }}
-          icon={<HardDrive size={18} />}
-          tooltip={t('Change Instance Location')}
-        />
-        <NavBtn onClick={openGitHub} icon={<Github size={18} />} tooltip="GitHub" />
-
-        <NavBtn onClick={openBugReport} icon={<Bug size={18} />} tooltip={t('Report Bug')} />
-
-        <LanguageSelector
-          currentBranch={currentBranch}
-          currentVersion={currentVersion}
-          onShowModManager={actions.showModManager}
+        <NavBtn onClick={() => actions.showModManager()} icon={<Package size={18} />} tooltip={t('Mod Manager')} accentColor={accentColor} />
+        <NavBtn onClick={actions.openFolder} icon={<FolderOpen size={18} />} tooltip={t('Open Instance Folder')} accentColor={accentColor} />
+        <NavBtn onClick={onOpenSettings} icon={<Settings size={18} />} tooltip={t('Settings')} accentColor={accentColor} />
+        <OnlineToggle accentColor={accentColor} />
+        <LanguageSelector 
+          currentBranch={currentBranch} 
+          currentVersion={currentVersion} 
+          onShowModManager={(query) => actions.showModManager(query)} 
         />
         <button
+          tabIndex={-1}
           onClick={openCoffee}
-          className="h-12 px-4 rounded-xl glass border border-white/5 flex items-center justify-center gap-2 text-white/60 hover:text-[#FFA845] hover:bg-[#FFA845]/10 active:scale-95 transition-all duration-150 relative group whitespace-nowrap"
+          className="h-12 px-4 rounded-xl glass border border-white/5 flex items-center justify-center gap-2 text-white/60 hover:text-[var(--accent)] hover:bg-[var(--accent-bg)] active:scale-95 transition-all duration-150 relative group whitespace-nowrap"
+          style={{ 
+            '--accent': accentColor,
+            '--accent-bg': `${accentColor}1a`
+          } as React.CSSProperties}
         >
           <span className="text-xs">{t('Buy me a')}</span>
-          <Coffee size={18} />
+          <CoffeeIcon size={20} />
         </button>
 
         {/* Spacer + Disclaimer in center */}
         <div className="flex-1 flex justify-center min-w-0">
           <p className="text-white/40 text-xs whitespace-nowrap truncate">
-            {t('Educational only.')} {t('Like it?')} <button onClick={() => BrowserOpenURL('https://hytale.com')} className="text-[#FFA845] font-semibold hover:underline cursor-pointer">{t('BUY IT')}</button>
+            {t('Educational only.')} {t('Like it?')} <button onClick={() => BrowserOpenURL('https://hytale.com')} className="font-semibold hover:underline cursor-pointer" style={{ color: accentColor }}>{t('BUY IT')}</button>
           </p>
         </div>
 
@@ -296,6 +309,7 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
         <div className="flex justify-end flex-shrink-0">
           {isGameRunning ? (
             <button
+              tabIndex={-1}
               onClick={onExit}
               className="h-12 px-6 rounded-xl font-black text-base tracking-tight flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-red-500 text-white hover:shadow-lg hover:shadow-red-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer"
             >
@@ -304,6 +318,7 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
             </button>
           ) : isDownloading ? (
             <div 
+              tabIndex={-1}
               className={`h-12 px-3 rounded-xl bg-[#151515] border border-white/10 flex items-center justify-center relative overflow-hidden min-w-[170px] max-w-[190px] group ${canCancel ? 'cursor-pointer' : 'cursor-default'}`}
               onMouseEnter={() => canCancel && setShowCancelButton(true)}
               onMouseLeave={() => setShowCancelButton(false)}
@@ -326,12 +341,13 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
                     {downloadState === 'extracting' && t('Extracting...')}
                     {downloadState === 'launching' && t('Launching...')}
                   </span>
-                  <span className="text-xs font-mono text-white/80 flex-shrink-0">{Math.round(progress)}%</span>
+                  <span className="text-xs font-mono text-white/80 flex-shrink-0">{Math.min(Math.round(progress), 100)}%</span>
                 </div>
               )}
             </div>
           ) : isCheckingInstalled ? (
             <button
+              tabIndex={-1}
               disabled
               className="h-12 px-5 rounded-xl font-black text-base tracking-tight flex items-center justify-center gap-2 bg-white/10 text-white/50 cursor-not-allowed"
             >
@@ -340,14 +356,20 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
             </button>
           ) : isVersionInstalled ? (
             <button
+              tabIndex={-1}
               onClick={onPlay}
-              className="h-12 px-6 rounded-xl font-black text-lg tracking-tight flex items-center justify-center gap-2 bg-gradient-to-r from-[#FFA845] to-[#FF6B35] text-white hover:shadow-lg hover:shadow-[#FFA845]/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer"
+              className="h-12 px-6 rounded-xl font-black text-lg tracking-tight flex items-center justify-center gap-2 text-white hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer"
+              style={{ 
+                background: `linear-gradient(to right, ${accentColor}, ${accentColor}cc)`,
+                boxShadow: `0 10px 15px -3px ${accentColor}40`
+              }}
             >
               <Play size={18} fill="currentColor" />
               <span>{t('PLAY')}</span>
             </button>
           ) : (
             <button
+              tabIndex={-1}
               onClick={onDownload}
               className="h-12 px-6 rounded-xl font-black text-base tracking-tight flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer"
             >
@@ -359,4 +381,6 @@ export const ControlSection: React.FC<ControlSectionProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ControlSection.displayName = 'ControlSection';

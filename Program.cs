@@ -29,6 +29,13 @@ class Program
         // Initialize backend services
         var app = new AppService();
         
+        // Apply hardware acceleration setting before creating window
+        // On Windows, WebView2 uses this environment variable
+        if (app.GetDisableHardwareAcceleration())
+        {
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu");
+        }
+        
         // Get the wwwroot directory
         _wwwroot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         if (!Directory.Exists(_wwwroot))
@@ -206,6 +213,12 @@ class Program
                         "IsVersionInstalled" => app.IsVersionInstalled(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1)),
                         "GetInstalledVersionsForBranch" => app.GetInstalledVersionsForBranch(GetArg<string>(request.Args, 0)),
                         "CheckLatestNeedsUpdate" => await app.CheckLatestNeedsUpdateAsync(GetArg<string>(request.Args, 0)),
+                        "GetPendingUpdateInfo" => await app.GetPendingUpdateInfoAsync(GetArg<string>(request.Args, 0)),
+                        "CopyUserData" => await app.CopyUserDataAsync(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1), GetArg<int>(request.Args, 2)),
+                        
+                        // Assets
+                        "HasAssetsZip" => app.HasAssetsZip(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1)),
+                        "GetAssetsZipPath" => app.GetAssetsZipPath(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1)),
                         
                         // Game
                         "DownloadAndLaunch" => await app.DownloadAndLaunchAsync(window),
@@ -218,6 +231,7 @@ class Program
                         // Folder
                         "OpenFolder" => app.OpenFolder(),
                         "SelectInstanceDirectory" => await app.SelectInstanceDirectoryAsync(),
+                        "BrowseFolder" => await app.BrowseFolderAsync(GetArg<string?>(request.Args, 0)),
                         
                         // News
                         "GetNews" => await app.GetNewsAsync(GetArg<int>(request.Args, 0)),
@@ -268,6 +282,61 @@ class Program
                         "CheckInstanceModUpdates" => await app.CheckInstanceModUpdatesAsync(
                             GetArg<string>(request.Args, 0),
                             GetArg<int>(request.Args, 1)),
+                        
+                        // Settings
+                        "GetLauncherBranch" => app.GetLauncherBranch(),
+                        "SetLauncherBranch" => app.SetLauncherBranch(GetArg<string>(request.Args, 0)),
+                        "CheckRosettaStatus" => app.CheckRosettaStatus(),
+                        "GetCloseAfterLaunch" => app.GetCloseAfterLaunch(),
+                        "SetCloseAfterLaunch" => app.SetCloseAfterLaunch(GetArg<bool>(request.Args, 0)),
+                        "GetShowDiscordAnnouncements" => app.GetShowDiscordAnnouncements(),
+                        "SetShowDiscordAnnouncements" => app.SetShowDiscordAnnouncements(GetArg<bool>(request.Args, 0)),
+                        "DismissAnnouncement" => app.DismissAnnouncement(GetArg<string>(request.Args, 0)),
+                        "OpenLauncherFolder" => app.OpenLauncherFolder(),
+                        "DeleteLauncherData" => app.DeleteLauncherData(),
+                        "GetLauncherFolderPath" => app.GetLauncherFolderPath(),
+                        "GetTestAnnouncement" => app.GetTestAnnouncement(),
+                        
+                        // News settings
+                        "GetDisableNews" => app.GetDisableNews(),
+                        "SetDisableNews" => app.SetDisableNews(GetArg<bool>(request.Args, 0)),
+                        
+                        // Background settings
+                        "GetBackgroundMode" => app.GetBackgroundMode(),
+                        "SetBackgroundMode" => app.SetBackgroundMode(GetArg<string>(request.Args, 0)),
+                        "GetAvailableBackgrounds" => app.GetAvailableBackgrounds(),
+                        
+                        // Accent color settings
+                        "GetAccentColor" => app.GetAccentColor(),
+                        "SetAccentColor" => app.SetAccentColor(GetArg<string>(request.Args, 0)),
+                        
+                        // Launcher Data Directory
+                        "GetLauncherDataDirectory" => app.GetLauncherDataDirectory(),
+                        "SetLauncherDataDirectory" => await app.SetLauncherDataDirectoryAsync(GetArg<string>(request.Args, 0)),
+                        
+                        // Hardware acceleration
+                        "GetDisableHardwareAcceleration" => app.GetDisableHardwareAcceleration(),
+                        "SetDisableHardwareAcceleration" => app.SetDisableHardwareAcceleration(GetArg<bool>(request.Args, 0)),
+                        
+                        // Online mode
+                        "GetOnlineMode" => app.GetOnlineMode(),
+                        "SetOnlineMode" => app.SetOnlineMode(GetArg<bool>(request.Args, 0)),
+                        
+                        // Auth domain
+                        "GetAuthDomain" => app.GetAuthDomain(),
+                        "SetAuthDomain" => app.SetAuthDomain(GetArg<string>(request.Args, 0)),
+                        
+                        // Skin configuration
+                        "GetSkinConfig" => app.GetSkinConfig(),
+                        "SaveSkinConfig" => app.SaveSkinConfig(GetArg<SkinConfig>(request.Args, 0)),
+                        "GetInstanceSkinConfig" => app.GetInstanceSkinConfig(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1)),
+                        "ApplySkinToInstance" => app.ApplySkinToInstance(GetArg<string>(request.Args, 0), GetArg<int>(request.Args, 1)),
+                        
+                        // Discord
+                        "GetDiscordAnnouncement" => await app.GetDiscordAnnouncementAsync(),
+                        "ReactToAnnouncement" => await app.ReactToAnnouncementAsync(
+                            GetArg<string>(request.Args, 0),
+                            GetArg<string>(request.Args, 1)),
                         
                         // Window Controls
                         "WindowMinimize" => SetMinimized(window, true),

@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Wifi, WifiOff } from 'lucide-react';
 import { GetOnlineMode, SetOnlineMode } from '../../wailsjs/go/app/App';
 
 interface OnlineToggleProps {
     className?: string;
+    focused?: boolean;
+    accentColor?: string;
 }
 
-export const OnlineToggle: React.FC<OnlineToggleProps> = ({ className }) => {
+export const OnlineToggle = forwardRef<HTMLButtonElement, OnlineToggleProps>(({ className, focused, accentColor = '#FFA845' }, ref) => {
     const { t } = useTranslation();
     const [isOnline, setIsOnline] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +48,7 @@ export const OnlineToggle: React.FC<OnlineToggleProps> = ({ className }) => {
 
     return (
         <button
+            ref={ref}
             onClick={handleToggle}
             className={`w-12 h-12 rounded-xl glass border flex items-center justify-center active:scale-95 transition-all duration-150 relative group ${
                 isOnline
@@ -53,6 +56,7 @@ export const OnlineToggle: React.FC<OnlineToggleProps> = ({ className }) => {
                     : 'border-white/5 text-white/60 hover:text-white/80 hover:bg-white/5'
             } ${className}`}
             title={isOnline ? t('Online Mode') : t('Offline Mode')}
+            style={focused ? { boxShadow: `0 0 0 2px ${accentColor}, 0 0 0 4px #090909` } : undefined}
         >
             {isOnline ? (
                 <Wifi size={20} />
@@ -64,4 +68,6 @@ export const OnlineToggle: React.FC<OnlineToggleProps> = ({ className }) => {
             </span>
         </button>
     );
-};
+});
+
+OnlineToggle.displayName = 'OnlineToggle';

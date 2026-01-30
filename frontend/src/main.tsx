@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { AccentColorProvider } from './contexts/AccentColorContext';
 import './i18n';
 import './index.css';
 
@@ -36,7 +37,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AccentColorProvider>
+        <App />
+      </AccentColorProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

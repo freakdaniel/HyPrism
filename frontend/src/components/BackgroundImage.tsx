@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 
 // Import all bg_*.jpg and bg_*.png backgrounds
 const backgroundModulesJpg = import.meta.glob('../assets/bg_*.jpg', { query: '?url', import: 'default', eager: true });
@@ -12,24 +12,37 @@ const backgroundImages = Object.entries(allBackgrounds)
     const numB = parseInt(b.match(/bg_(\d+)/)?.[1] || '0');
     return numA - numB;
   })
-  .map(([, url]) => url as string);
+  .map(([path, url]) => ({ 
+    name: path.match(/bg_(\d+)/)?.[0] || 'bg_1', 
+    url: url as string 
+  }));
 
-// Fallback to old background if no bg_* images found
-import fallbackBackground from '../assets/background.jpg';
-if (backgroundImages.length === 0) {
-  backgroundImages.push(fallbackBackground);
-}
+// Create a map for quick lookup
+const backgroundMap = Object.fromEntries(backgroundImages.map(bg => [bg.name, bg.url]));
+
+// Use first bg image as fallback if array somehow ends up empty (shouldn't happen with glob)
+// No separate fallback file needed since we have bg_* images
 
 // Configuration
 const TRANSITION_DURATION = 2000; // 2 seconds crossfade
 const IMAGE_DURATION = 15000; // 15 seconds per image
 
-export const BackgroundImage: React.FC = () => {
+interface BackgroundImageProps {
+  mode?: string; // 'slideshow', a specific background name like 'bg_1', or 'color:#hexcode'
+}
+
+export const BackgroundImage: React.FC<BackgroundImageProps> = memo(({ mode = 'slideshow' }) => {
   const [currentIndex, setCurrentIndex] = useState(() => 
     Math.floor(Math.random() * backgroundImages.length)
   );
   const [isVisible, setIsVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Determine mode type
+  const isSolidColor = mode?.startsWith('color:');
+  const solidColor = isSolidColor ? mode.replace('color:', '') : null;
+  const isStatic = mode !== 'slideshow' && !isSolidColor;
+  const staticUrl = isStatic && backgroundMap[mode] ? backgroundMap[mode] : null;
 
   // Initial fade in
   useEffect(() => {
@@ -37,9 +50,9 @@ export const BackgroundImage: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Cycle through backgrounds
+  // Cycle through backgrounds (only in slideshow mode)
   useEffect(() => {
-    if (backgroundImages.length <= 1) return;
+    if (isStatic || isSolidColor || backgroundImages.length <= 1) return;
 
     const cycleBackground = () => {
       setIsVisible(false);
@@ -56,26 +69,42 @@ export const BackgroundImage: React.FC = () => {
       clearTimeout(interval);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [currentIndex]);
+  }, [currentIndex, isStatic, isSolidColor]);
+
+  const currentImageUrl = staticUrl || backgroundImages[currentIndex]?.url;
 
   return (
     <>
       {/* Background container */}
       <div className="absolute inset-0 overflow-hidden bg-black">
-        {/* Background image - no parallax, just fade transitions */}
-        <div
-          className="absolute inset-0"
-          style={{
-            transition: `opacity ${TRANSITION_DURATION}ms ease-in-out`,
-            opacity: isVisible ? 1 : 0,
-          }}
-        >
-          <img
-            src={backgroundImages[currentIndex]}
-            alt=""
-            className="w-full h-full object-cover"
+        {/* Solid color background */}
+        {isSolidColor && solidColor && (
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: solidColor,
+              transition: `opacity ${TRANSITION_DURATION}ms ease-in-out`,
+              opacity: isVisible ? 1 : 0,
+            }}
           />
-        </div>
+        )}
+        
+        {/* Background image - no parallax, just fade transitions */}
+        {!isSolidColor && (
+          <div
+            className="absolute inset-0"
+            style={{
+              transition: `opacity ${TRANSITION_DURATION}ms ease-in-out`,
+              opacity: isVisible ? 1 : 0,
+            }}
+          >
+            <img
+              src={currentImageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
         
         {/* Vignette effect */}
         <div 
@@ -90,4 +119,6 @@ export const BackgroundImage: React.FC = () => {
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 pointer-events-none" />
     </>
   );
-};
+});
+
+BackgroundImage.displayName = 'BackgroundImage';

@@ -1,24 +1,31 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BrowserOpenURL } from '../wailsjs/runtime/runtime';
 import { GameBranch } from './constants/enums';
 import { BackgroundImage } from './components/BackgroundImage';
 import { ProfileSection } from './components/ProfileSection';
 import { ControlSection } from './components/ControlSection';
 import { MusicPlayer } from './components/MusicPlayer';
 import { UpdateOverlay } from './components/UpdateOverlay';
-import { ErrorModal } from './components/ErrorModal';
-import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
-import { ModManager } from './components/ModManager';
+import { DiscordIcon } from './components/DiscordIcon';
+// Controller detection removed - not using floating indicator
 import hytaleLogo from './assets/logo.png';
+
+// Lazy load heavy modals for better initial load performance
+const ErrorModal = lazy(() => import('./components/ErrorModal').then(m => ({ default: m.ErrorModal })));
+const DeleteConfirmationModal = lazy(() => import('./components/DeleteConfirmationModal').then(m => ({ default: m.DeleteConfirmationModal })));
+const ModManager = lazy(() => import('./components/ModManager').then(m => ({ default: m.ModManager })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const UpdateConfirmationModal = lazy(() => import('./components/UpdateConfirmationModal').then(m => ({ default: m.UpdateConfirmationModal })));
+const NewsPreview = lazy(() => import('./components/NewsPreview').then(m => ({ default: m.NewsPreview })));
+const ProfileEditor = lazy(() => import('./components/ProfileEditor').then(m => ({ default: m.ProfileEditor })));
 
 import {
   DownloadAndLaunch,
-  OpenFolder,
   OpenInstanceFolder,
   GetNick,
   SetNick,
   GetUUID,
-  SetUUID,
   DeleteGame,
   Update,
   ExitGame,
@@ -32,15 +39,31 @@ import {
   IsVersionInstalled,
   GetInstalledVersionsForBranch,
   CheckLatestNeedsUpdate,
+  GetPendingUpdateInfo,
+  CopyUserData,
   // Settings
   GetCustomInstanceDir,
   SetInstanceDirectory,
   GetNews,
   GetLauncherVersion,
+  GetLauncherBranch,
+  SetLauncherBranch,
+  CheckRosettaStatus,
+  GetCloseAfterLaunch,
+  WindowClose,
+  GetBackgroundMode,
+  GetDisableNews,
+  GetAccentColor,
 } from '../wailsjs/go/app/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
-import { NewsPreview } from './components/NewsPreview';
 import appIcon from './assets/appicon.png';
+
+// Modal loading fallback - minimal spinner
+const ModalFallback = () => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+  </div>
+);
 
 const withLatest = (versions: number[] | null | undefined): number[] => {
   const base = Array.isArray(versions) ? versions : [];
@@ -132,12 +155,17 @@ const App: React.FC = () => {
   const [showDelete, setShowDelete] = useState<boolean>(false);
   const [showModManager, setShowModManager] = useState<boolean>(false);
   const [modManagerSearchQuery, setModManagerSearchQuery] = useState<string>('');
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showProfileEditor, setShowProfileEditor] = useState<boolean>(false);
   const [error, setError] = useState<any>(null);
   const [launchTimeoutError, setLaunchTimeoutError] = useState<{ message: string; logs: string[] } | null>(null);
 
+  // Settings state
+  const [launcherBranch, setLauncherBranch] = useState<string>('release');
+  const [rosettaWarning, setRosettaWarning] = useState<{ message: string; command: string; tutorialUrl?: string } | null>(null);
+
   // Game launch tracking
   const gameLaunchTimeRef = useRef<number | null>(null);
-  const LAUNCH_TIMEOUT_MS = 60000; // 1 minute
 
   // Version state
   const [currentBranch, setCurrentBranch] = useState<string>(GameBranch.RELEASE);
@@ -149,6 +177,19 @@ const App: React.FC = () => {
   const [isCheckingInstalled, setIsCheckingInstalled] = useState<boolean>(false);
   const [customInstanceDir, setCustomInstanceDir] = useState<string>("");
   const [latestNeedsUpdate, setLatestNeedsUpdate] = useState<boolean>(false);
+
+  // Background, news, and accent color settings
+  const [backgroundMode, setBackgroundMode] = useState<string>('slideshow');
+  const [newsDisabled, setNewsDisabled] = useState<boolean>(false);
+  const [_accentColor, setAccentColor] = useState<string>('#FFA845'); // Used only for SettingsModal callback
+
+  // Pending game update modal
+  const [pendingUpdate, setPendingUpdate] = useState<{
+    oldVersion: number;
+    newVersion: number;
+    hasOldUserData: boolean;
+    branch: string;
+  } | null>(null);
 
   // Check if current version is installed when branch or version changes
   useEffect(() => {
@@ -270,26 +311,7 @@ const App: React.FC = () => {
       try {
         const running = await IsGameRunning();
         if (!running) {
-          // Check if we hit the timeout without the game ever running properly
-          const launchTime = gameLaunchTimeRef.current;
-          const elapsed = launchTime ? Date.now() - launchTime : 0;
-          
-          if (elapsed < LAUNCH_TIMEOUT_MS) {
-            // Game stopped before timeout - likely crashed or failed to launch
-            try {
-              const logs = await GetRecentLogs(10);
-              setLaunchTimeoutError({
-                message: t('Game process exited unexpectedly'),
-                logs: logs || []
-              });
-            } catch {
-              setLaunchTimeoutError({
-                message: t('Game process exited unexpectedly'),
-                logs: []
-              });
-            }
-          }
-          
+          // Just update state - error handling is done by game-state event with exit code
           setIsGameRunning(false);
           setProgress(0);
           gameLaunchTimeRef.current = null;
@@ -302,12 +324,25 @@ const App: React.FC = () => {
     return () => clearInterval(pollInterval);
   }, [isGameRunning, t]);
 
+  // Reload profile data from backend
+  const reloadProfile = async () => {
+    const nick = await GetNick();
+    if (nick) setUsername(nick);
+    const uuid = await GetUUID();
+    if (uuid) setUuid(uuid);
+  };
+
   useEffect(() => {
     // Initialize user settings
     GetNick().then((n: string) => n && setUsername(n));
     GetUUID().then((u: string) => u && setUuid(u));
     GetLauncherVersion().then((v: string) => setLauncherVersion(v));
     GetCustomInstanceDir().then((dir: string) => dir && setCustomInstanceDir(dir));
+
+    // Load background mode, news settings, and accent color
+    GetBackgroundMode().then((mode: string) => setBackgroundMode(mode || 'slideshow'));
+    GetDisableNews().then((disabled: boolean) => setNewsDisabled(disabled));
+    GetAccentColor().then((color: string) => setAccentColor(color || '#FFA845'));
 
     // Load saved branch and version - must load branch first, then version
     const loadSettings = async () => {
@@ -316,6 +351,28 @@ const App: React.FC = () => {
         const savedBranch = await GetVersionType();
         const branch = normalizeBranch(savedBranch || GameBranch.RELEASE);
         setCurrentBranch(branch);
+
+        // Load launcher branch (release/beta channel)
+        try {
+          const savedLauncherBranch = await GetLauncherBranch();
+          setLauncherBranch(savedLauncherBranch || 'release');
+        } catch (e) {
+          console.error('Failed to load launcher branch:', e);
+        }
+
+        // Check Rosetta status on macOS
+        try {
+          const rosettaStatus = await CheckRosettaStatus();
+          if (rosettaStatus && rosettaStatus.NeedsInstall) {
+            setRosettaWarning({
+              message: rosettaStatus.Message,
+              command: rosettaStatus.Command,
+              tutorialUrl: rosettaStatus.TutorialUrl || undefined
+            });
+          }
+        } catch (e) {
+          console.error('Failed to check Rosetta status:', e);
+        }
 
         // Load version list for this branch
         setIsLoadingVersions(true);
@@ -389,14 +446,45 @@ const App: React.FC = () => {
     });
     
     // Game state event listener
-    const unsubGameState = EventsOn('game-state', (data: any) => {
+    const unsubGameState = EventsOn('game-state', async (data: any) => {
       if (data.state === 'started') {
         setIsGameRunning(true);
         setIsDownloading(false);
         setProgress(0);
+        
+        // Check if close after launch is enabled
+        try {
+          const closeAfterLaunch = await GetCloseAfterLaunch();
+          if (closeAfterLaunch) {
+            // Small delay to ensure game has started
+            setTimeout(() => {
+              WindowClose();
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('Failed to check close after launch:', err);
+        }
       } else if (data.state === 'stopped') {
+        // Only show error if exit code is non-zero (crash/error)
+        // Exit code 0 or undefined = normal exit, null = unknown
+        const exitCode = data.exitCode;
+        if (exitCode !== undefined && exitCode !== null && exitCode !== 0) {
+          try {
+            const logs = await GetRecentLogs(10);
+            setLaunchTimeoutError({
+              message: t('Game crashed with exit code {{code}}', { code: exitCode }),
+              logs: logs || []
+            });
+          } catch {
+            setLaunchTimeoutError({
+              message: t('Game crashed with exit code {{code}}', { code: exitCode }),
+              logs: []
+            });
+          }
+        }
         setIsGameRunning(false);
         setProgress(0);
+        gameLaunchTimeRef.current = null; // Clear launch time to prevent polling error
       }
     });
 
@@ -431,22 +519,13 @@ const App: React.FC = () => {
     setUpdateStats({ d: 0, t: 0 });
 
     try {
-      const ok = await Update();
-      if (ok) {
-        setError({
-          type: 'INFO',
-          message: t('Downloaded the latest HyPrism to your Downloads folder.'),
-          technical: t('We attempted to open the file so you can install it. If it did not open, go to Downloads and run the file manually.'),
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        setError({
-          type: 'INFO',
-          message: t('Could not auto-download. Please download manually.'),
-          technical: 'https://github.com/yyyumeniku/HyPrism/releases/latest',
-          timestamp: new Date().toISOString()
-        });
-      }
+      await Update();
+      setError({
+        type: 'INFO',
+        message: t('Downloaded the latest HyPrism to your Downloads folder.'),
+        technical: t('We attempted to open the file so you can install it. If it did not open, go to Downloads and run the file manually.'),
+        timestamp: new Date().toISOString()
+      });
     } catch (err) {
       console.error('Update failed:', err);
       setError({
@@ -471,6 +550,30 @@ const App: React.FC = () => {
       return;
     }
 
+    // Check if using "Latest" and there's a pending update with userdata
+    if (currentVersion === 0) {
+      try {
+        const updateInfo = await GetPendingUpdateInfo(currentBranch);
+        if (updateInfo && updateInfo.HasOldUserData) {
+          // Show the update confirmation modal
+          setPendingUpdate({
+            oldVersion: updateInfo.OldVersion,
+            newVersion: updateInfo.NewVersion,
+            hasOldUserData: updateInfo.HasOldUserData,
+            branch: updateInfo.Branch
+          });
+          return; // Don't proceed, wait for modal decision
+        }
+      } catch (err) {
+        console.error('Failed to check pending update:', err);
+        // Continue anyway if check fails
+      }
+    }
+
+    doLaunch();
+  };
+
+  const doLaunch = async () => {
     setIsDownloading(true);
     setDownloadState('downloading');
     try {
@@ -482,6 +585,27 @@ const App: React.FC = () => {
       console.error('Launch failed:', err);
       setIsDownloading(false);
     }
+  };
+
+  const handleUpdateConfirmWithCopy = async () => {
+    if (!pendingUpdate) return;
+    try {
+      // Copy userdata from old version (0 = latest instance) to the new version
+      await CopyUserData(pendingUpdate.branch, 0, pendingUpdate.newVersion);
+    } catch (err) {
+      console.error('Failed to copy userdata:', err);
+    }
+    setPendingUpdate(null);
+    doLaunch();
+  };
+
+  const handleUpdateConfirmWithoutCopy = async () => {
+    setPendingUpdate(null);
+    doLaunch();
+  };
+
+  const handleUpdateCancel = () => {
+    setPendingUpdate(null);
   };
 
   const handleCancelDownload = async () => {
@@ -501,21 +625,6 @@ const App: React.FC = () => {
     await SetNick(newNick);
   };
 
-  const handleUuidChange = async (newUuid: string) => {
-    const ok = await SetUUID(newUuid);
-    if (ok) {
-      setUuid(newUuid);
-      return true;
-    }
-    setError({
-      type: 'VALIDATION',
-      message: t('Invalid UUID'),
-      technical: t('Please enter a valid UUID (e.g. 123e4567-e89b-12d3-a456-426614174000).'),
-      timestamp: new Date().toISOString()
-    });
-    return false;
-  };
-
 
   const handleExit = async () => {
     try {
@@ -525,6 +634,16 @@ const App: React.FC = () => {
     }
     setIsGameRunning(false);
     setProgress(0);
+  };
+
+  const handleLauncherBranchChange = async (branch: string) => {
+    try {
+      await SetLauncherBranch(branch);
+      setLauncherBranch(branch);
+      console.log('Launcher branch changed to:', branch);
+    } catch (err) {
+      console.error('Failed to change launcher branch:', err);
+    }
   };
 
   const handleCustomDirChange = async () => {
@@ -591,7 +710,7 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen bg-[#090909] text-white overflow-hidden font-sans select-none">
-      <BackgroundImage />
+      <BackgroundImage mode={backgroundMode} />
 
       {/* Music Player - positioned in top right */}
       <div className="absolute top-4 right-4 z-20">
@@ -614,31 +733,62 @@ const App: React.FC = () => {
             isEditing={isEditing}
             onEditToggle={setIsEditing}
             onUserChange={handleNickChange}
-            onUuidChange={handleUuidChange}
             updateAvailable={!!updateAsset}
             onUpdate={handleUpdate}
             launcherVersion={launcherVersion}
+            onOpenProfileEditor={() => setShowProfileEditor(true)}
           />
           {/* Hytale Logo & News - Right Side */}
           <div className="flex flex-col items-end gap-3">
             <img src={hytaleLogo} alt="Hytale" className="h-24 drop-shadow-2xl" />
-            <NewsPreview
-              getNews={async (count) => {
-                const releases = await fetchLauncherReleases();
-                const hytale = await GetNews(Math.max(0, count));
+            {/* Social Buttons Row */}
+            <div className="flex items-center gap-3">
+              {/* Discord Button */}
+              <button
+                onClick={() => BrowserOpenURL('https://discord.gg/3U8KNbap3g')}
+                className="p-2 rounded-xl hover:bg-[#5865F2]/20 transition-all duration-150 cursor-pointer active:scale-95"
+                title={t('Join Discord')}
+              >
+                <DiscordIcon size={28} className="drop-shadow-lg" />
+              </button>
+              {/* GitHub Button */}
+              <button
+                onClick={() => BrowserOpenURL('https://github.com/yyyumeniku/HyPrism')}
+                className="w-10 h-10 rounded-xl bg-transparent flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 active:scale-95 transition-all duration-150"
+                title={t('GitHub Repository')}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              </button>
+              {/* Bug Report Button */}
+              <button
+                onClick={() => BrowserOpenURL('https://github.com/yyyumeniku/HyPrism/issues/new')}
+                className="w-10 h-10 rounded-xl bg-transparent flex items-center justify-center text-white/60 hover:text-red-400 hover:bg-red-400/10 active:scale-95 transition-all duration-150"
+                title={t('Report a Bug')}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>
+              </button>
+            </div>
+            {!newsDisabled && (
+              <Suspense fallback={<div className="w-80 h-32 animate-pulse bg-white/5 rounded-xl" />}>
+                <NewsPreview
+                  getNews={async (count) => {
+                    const releases = await fetchLauncherReleases();
+                    const hytale = await GetNews(Math.max(0, count));
 
-                const hytaleItems = (hytale || []).map((item: any) => ({
-                  item: { ...item, source: 'hytale' as const },
-                  dateMs: parseDateMs(item?.date)
-                }));
+                    const hytaleItems = (hytale || []).map((item: any) => ({
+                      item: { ...item, source: 'hytale' as const },
+                      dateMs: parseDateMs(item?.date)
+                    }));
 
-                const combined = [...releases, ...hytaleItems]
-                  .sort((a, b) => b.dateMs - a.dateMs)
-                  .map((x) => x.item);
+                    const combined = [...releases, ...hytaleItems]
+                      .sort((a, b) => b.dateMs - a.dateMs)
+                      .map((x) => x.item);
 
-                return combined;
-              }}
-            />
+                    return combined;
+                  }}
+                />
+              </Suspense>
+            )}
           </div>
         </div>
 
@@ -665,6 +815,7 @@ const App: React.FC = () => {
           onBranchChange={handleBranchChange}
           onVersionChange={handleVersionChange}
           onCustomDirChange={handleCustomDirChange}
+          onOpenSettings={() => setShowSettings(true)}
           actions={{
             openFolder: () => OpenInstanceFolder(currentBranch, currentVersion),
             showDelete: () => setShowDelete(true),
@@ -676,46 +827,85 @@ const App: React.FC = () => {
         />
       </main>
 
-      {/* Modals */}
-      {showDelete && (
-        <DeleteConfirmationModal
-          onConfirm={() => {
-            DeleteGame(currentBranch, currentVersion);
-            setShowDelete(false);
-          }}
-          onCancel={() => setShowDelete(false)}
-        />
-      )}
+      {/* Modals - wrapped in Suspense for lazy loading */}
+      <Suspense fallback={<ModalFallback />}>
+        {showDelete && (
+          <DeleteConfirmationModal
+            onConfirm={() => {
+              DeleteGame(currentBranch, currentVersion);
+              setShowDelete(false);
+            }}
+            onCancel={() => setShowDelete(false)}
+          />
+        )}
 
-      {error && (
-        <ErrorModal
-          error={error}
-          onClose={() => setError(null)}
-        />
-      )}
+        {pendingUpdate && (
+          <UpdateConfirmationModal
+            oldVersion={pendingUpdate.oldVersion}
+            newVersion={pendingUpdate.newVersion}
+            hasOldUserData={pendingUpdate.hasOldUserData}
+            onConfirmWithCopy={handleUpdateConfirmWithCopy}
+            onConfirmWithoutCopy={handleUpdateConfirmWithoutCopy}
+            onCancel={handleUpdateCancel}
+          />
+        )}
 
-      {launchTimeoutError && (
-        <ErrorModal
-          error={{
-            type: 'LAUNCH_FAILED',
-            message: launchTimeoutError.message,
-            technical: launchTimeoutError.logs.length > 0 
-              ? launchTimeoutError.logs.join('\n')
-              : 'No log entries available',
-            timestamp: new Date().toISOString()
-          }}
-          onClose={() => setLaunchTimeoutError(null)}
-        />
-      )}
+        {error && (
+          <ErrorModal
+            error={error}
+            onClose={() => setError(null)}
+          />
+        )}
 
-      {showModManager && (
-        <ModManager
-          onClose={() => setShowModManager(false)}
-          currentBranch={currentBranch}
-          currentVersion={currentVersion}
-          initialSearchQuery={modManagerSearchQuery}
-        />
-      )}
+        {launchTimeoutError && (
+          <ErrorModal
+            error={{
+              type: 'LAUNCH_FAILED',
+              message: launchTimeoutError.message,
+              technical: launchTimeoutError.logs.length > 0 
+                ? launchTimeoutError.logs.join('\n')
+                : 'No log entries available',
+              timestamp: new Date().toISOString()
+            }}
+            onClose={() => setLaunchTimeoutError(null)}
+          />
+        )}
+
+        {showModManager && (
+          <ModManager
+            onClose={() => setShowModManager(false)}
+            currentBranch={currentBranch}
+            currentVersion={currentVersion}
+            initialSearchQuery={modManagerSearchQuery}
+          />
+        )}
+
+        {showSettings && (
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            launcherBranch={launcherBranch}
+            onLauncherBranchChange={handleLauncherBranchChange}
+            onShowModManager={(query) => {
+              setModManagerSearchQuery(query || '');
+              setShowModManager(true);
+            }}
+            rosettaWarning={rosettaWarning}
+            onBackgroundModeChange={(mode) => setBackgroundMode(mode)}
+            onNewsDisabledChange={(disabled) => setNewsDisabled(disabled)}
+            onAccentColorChange={(color) => setAccentColor(color)}
+          />
+        )}
+
+        {/* Profile Editor */}
+        {showProfileEditor && (
+          <ProfileEditor
+            isOpen={showProfileEditor}
+            onClose={() => setShowProfileEditor(false)}
+            onProfileUpdate={reloadProfile}
+          />
+        )}
+
+      </Suspense>
     </div>
   );
 };

@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --accent-color: #FFA845;
+  --accent-r: 255;
+  --accent-g: 168;
+  --accent-b: 69;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -26,12 +33,12 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 168, 69, 0.3);
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.3);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 168, 69, 0.5);
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.5);
 }
 
 /* Wails drag region */
@@ -41,12 +48,16 @@ html, body, #root {
 
 /* Selection color */
 ::selection {
-  background: rgba(255, 168, 69, 0.3);
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.3);
   color: white;
 }
 
 /* Focus styles */
 input:focus, button:focus, select:focus {
+  outline: none;
+}
+
+button:focus-visible {
   outline: none;
 }
 

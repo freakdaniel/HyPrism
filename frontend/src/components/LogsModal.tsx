@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X, Terminal, Loader2, Download, Copy, Check } from 'lucide-react';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 interface LogsModalProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ export const LogsModal: React.FC<LogsModalProps> = ({
   getGameLogs
 }) => {
   const { t } = useTranslation();
+  const { accentColor } = useAccentColor();
   const [logs, setLogs] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -92,8 +94,8 @@ export const LogsModal: React.FC<LogsModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FFA845]/20 flex items-center justify-center">
-              <Terminal size={20} className="text-[#FFA845]" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${accentColor}33` }}>
+              <Terminal size={20} style={{ color: accentColor }} />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">{t('Game Logs')}</h2>
@@ -112,7 +114,7 @@ export const LogsModal: React.FC<LogsModalProps> = ({
         <div className="flex-1 p-4 overflow-hidden">
           {isLoading && !logs ? (
             <div className="flex flex-col items-center justify-center h-full">
-              <Loader2 size={32} className="text-[#FFA845] animate-spin mb-4" />
+              <Loader2 size={32} className="animate-spin mb-4" style={{ color: accentColor }} />
               <p className="text-gray-400">{t('Loading logs...')}</p>
             </div>
           ) : (
@@ -151,7 +153,8 @@ export const LogsModal: React.FC<LogsModalProps> = ({
             </button>
             <button
               onClick={onClose}
-              className="px-6 py-2 rounded-lg bg-[#FFA845]/20 text-[#FFA845] hover:bg-[#FFA845]/30 transition-colors font-medium"
+              className="px-6 py-2 rounded-lg transition-colors font-medium hover:opacity-80"
+              style={{ backgroundColor: `${accentColor}33`, color: accentColor }}
             >
               {t('Close')}
             </button>

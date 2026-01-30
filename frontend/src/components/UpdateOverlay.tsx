@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { DownloadCloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 interface UpdateOverlayProps {
   progress: number;
@@ -17,8 +18,9 @@ const formatBytes = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-export const UpdateOverlay: React.FC<UpdateOverlayProps> = ({ progress, downloaded, total }) => {
+export const UpdateOverlay: React.FC<UpdateOverlayProps> = memo(({ progress, downloaded, total }) => {
   const { t } = useTranslation();
+  const { accentColor } = useAccentColor();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -36,7 +38,7 @@ export const UpdateOverlay: React.FC<UpdateOverlayProps> = ({ progress, download
           ease: "easeInOut"
         }}
       >
-        <DownloadCloud size={80} className="text-[#FFA845] mb-8" />
+        <DownloadCloud size={80} className="mb-8" style={{ color: accentColor }} />
       </motion.div>
 
       <h1 className="text-5xl font-black mb-4 tracking-tight text-white">
@@ -54,7 +56,8 @@ export const UpdateOverlay: React.FC<UpdateOverlayProps> = ({ progress, download
             initial={{ width: 0 }}
             animate={{ width: `${Math.min(progress, 100)}%` }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#FFA845] to-[#FF6B35] rounded-full"
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{ background: `linear-gradient(to right, ${accentColor}, ${accentColor}cc)` }}
           />
           <div className="absolute inset-0 animate-shimmer" />
         </div>
@@ -63,7 +66,7 @@ export const UpdateOverlay: React.FC<UpdateOverlayProps> = ({ progress, download
           <span className="text-gray-400">
             {formatBytes(downloaded)} / {formatBytes(total)}
           </span>
-          <span className="font-bold text-[#FFA845]">{Math.round(progress)}%</span>
+          <span className="font-bold" style={{ color: accentColor }}>{Math.round(progress)}%</span>
         </div>
       </div>
 
@@ -72,4 +75,6 @@ export const UpdateOverlay: React.FC<UpdateOverlayProps> = ({ progress, download
       </p>
     </motion.div>
   );
-};
+});
+
+UpdateOverlay.displayName = 'UpdateOverlay';

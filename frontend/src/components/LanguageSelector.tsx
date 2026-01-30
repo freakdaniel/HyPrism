@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { GameBranch, Language } from '../constants/enums';
 import { LANGUAGE_CONFIG } from '../constants/languages';
 import { GetInstanceInstalledMods } from '../../wailsjs/go/app/App';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 interface LanguageSelectorProps {
     currentBranch?: string;
@@ -17,6 +18,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
     onShowModManager
 }) => {
     const { i18n, t } = useTranslation();
+    const { accentColor } = useAccentColor();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [showConfirm, setShowConfirm] = useState<{ langName: string; langCode: string; searchQuery: string } | null>(null);
@@ -94,8 +96,16 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
             <div ref={dropdownRef} className="relative">
                 <button
                     onClick={() => setIsOpen(!isOpen)}
-                    className="w-12 h-12 rounded-xl glass border border-white/5 flex items-center justify-center text-white/60 hover:text-[#FFA845] hover:bg-[#FFA845]/10 active:scale-95 transition-all duration-150 relative group"
+                    className="w-12 h-12 rounded-xl glass border border-white/5 flex items-center justify-center text-white/60 active:scale-95 transition-all duration-150 relative group"
                     title={t('Change Language')}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.color = accentColor;
+                        e.currentTarget.style.backgroundColor = `${accentColor}1a`;
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '';
+                        e.currentTarget.style.backgroundColor = '';
+                    }}
                 >
                     <span className="font-bold text-sm">{i18n.language.toUpperCase()}</span>
                     <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
@@ -144,7 +154,8 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                             </button>
                             <button
                                 onClick={handleConfirmInstall}
-                                className="flex-1 py-2 rounded-xl bg-[#FFA845] hover:bg-[#FFA845]/80 text-black text-sm font-medium shadow-lg shadow-[#FFA845]/20 transition-all"
+                                className="flex-1 py-2 rounded-xl text-black text-sm font-medium shadow-lg transition-all hover:opacity-90"
+                                style={{ backgroundColor: accentColor, boxShadow: `0 10px 15px -3px ${accentColor}33` }}
                             >
                                 {t('Yes, search')}
                             </button>
@@ -156,7 +167,8 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                                     type="checkbox"
                                     checked={dontAskAgain}
                                     onChange={(e) => setDontAskAgain(e.target.checked)}
-                                    className="rounded bg-white/10 border-white/20 text-[#FFA845] focus:ring-[#FFA845] focus:ring-offset-0"
+                                    className="rounded bg-white/10 border-white/20 focus:ring-offset-0"
+                                    style={{ accentColor }}
                                 />
                                 {t("Don't ask again")}
                             </label>

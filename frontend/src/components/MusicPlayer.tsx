@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAccentColor } from '../contexts/AccentColorContext';
 
 // Import music tracks
 import menu01 from '../assets/menu_01.ogg';
@@ -44,8 +45,9 @@ interface MusicPlayerProps {
   forceMuted?: boolean;
 }
 
-export const MusicPlayer: React.FC<MusicPlayerProps> = ({ className = '', forceMuted = false }) => {
+export const MusicPlayer: React.FC<MusicPlayerProps> = memo(({ className = '', forceMuted = false }) => {
   const { t } = useTranslation();
+  const { accentColor } = useAccentColor();
   const [isMuted, setIsMuted] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(() => 
@@ -221,9 +223,11 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ className = '', forceM
         ) : isMuted ? (
           <VolumeX size={20} className="text-gray-400" />
         ) : (
-          <Volume2 size={20} className="text-[#FFA845]" />
+          <Volume2 size={20} style={{ color: accentColor }} />
         )}
       </button>
     </>
   );
-};
+});
+
+MusicPlayer.displayName = 'MusicPlayer';
