@@ -137,18 +137,28 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     else
       echo "!! Missing $cmd. Install: $ubuntu_pkgs (Ubuntu) or $fedora_pkgs (Fedora). Use --auto-install-deps to auto-install."
     fi
+    return 1
+  }
+
+  require_tool() {
+    local cmd="$1" ubuntu_pkgs="$2" fedora_pkgs="$3" post_install="$4"
+    ensure_tool "$cmd" "$ubuntu_pkgs" "$fedora_pkgs" "$post_install" || true
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "ERROR: $cmd is required for this build but is not available." >&2
+      exit 1
+    fi
   }
 
   # Packaging helpers often missing on fresh VMs
   if [[ "$ONLY_BUNDLE" != "1" ]]; then
     if [[ "$DO_DEB" == "1" ]]; then
-      ensure_tool fpm "ruby ruby-dev rubygems build-essential rpm" "ruby ruby-devel rubygems @development-tools rpm-build" "command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm"
+      require_tool fpm "ruby ruby-dev rubygems build-essential rpm" "ruby ruby-devel rubygems @development-tools rpm-build" "command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm"
     fi
     if [[ "$DO_APPIMAGE" == "1" ]]; then
-      ensure_tool appimagetool "appimagetool" "appimagetool" ""
+      require_tool appimagetool "appimagetool" "appimagetool" "command -v appimagetool >/dev/null 2>&1 || { sudo apt-get update -y || true; sudo apt-get install -y libfuse2 || true; curl -fsSL -o /tmp/appimagetool \"https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage\"; chmod +x /tmp/appimagetool; sudo mv /tmp/appimagetool /usr/local/bin/appimagetool; }"
     fi
     if [[ "$DO_FLATPAK" == "1" ]]; then
-      ensure_tool flatpak-builder "flatpak flatpak-builder flatpak-builder-libs" "flatpak flatpak-builder appstream-util desktop-file-utils" ""
+      require_tool flatpak-builder "flatpak flatpak-builder flatpak-builder-libs" "flatpak flatpak-builder appstream-util desktop-file-utils" ""
     fi
   fi
 fi
@@ -229,7 +239,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   [[ -f "$DESKTOP_SRC" ]] && cp "$DESKTOP_SRC" "$PKGROOT/usr/share/applications/dev.hyprism.HyPrism.desktop"
   [[ -f "$ICON_SRC" ]] && cp "$ICON_SRC" "$PKGROOT/usr/share/icons/hicolor/256x256/apps/dev.hyprism.HyPrism.png"
 
-  if [[ "$DO_DEB" == "1" ]] && command -v fpm >/dev/null 2>&1; then
+  if [[ "$DO_DEB" == "1" ]]; then
     echo "==> Building .deb and .rpm via fpm"
     fpm -s dir -t deb -n hyprism -v "$VERSION" -C "$PKGROOT" \
       --description "HyPrism launcher" --url "https://github.com/yyyumeniku/HyPrism" \
@@ -238,14 +248,10 @@ if [[ "$(uname -s)" == "Linux" ]]; then
       --description "HyPrism launcher" --url "https://github.com/yyyumeniku/HyPrism" \
       -p "$ARTIFACTS/HyPrism-linux-x64.rpm" .
   else
-    if [[ "$DO_DEB" == "1" ]]; then
-      echo "!! fpm not found; skipping deb/rpm generation"
-    else
-      echo "==> Skipping deb/rpm generation (--no-deb/--only-*)"
-    fi
+    echo "==> Skipping deb/rpm generation (--no-deb/--only-*)"
   fi
 
-  if [[ "$DO_APPIMAGE" == "1" ]] && command -v appimagetool >/dev/null 2>&1; then
+  if [[ "$DO_APPIMAGE" == "1" ]]; then
     echo "==> Building AppImage"
     APPDIR="$ARTIFACTS/linux-x64/AppDir"
     rm -rf "$APPDIR"
@@ -264,14 +270,10 @@ EOF
     rm -f "$ARTIFACTS/HyPrism-linux-x64.AppImage"
     appimagetool "$APPDIR" "$ARTIFACTS/HyPrism-linux-x64.AppImage"
   else
-    if [[ "$DO_APPIMAGE" == "1" ]]; then
-      echo "!! appimagetool not found; skipping AppImage"
-    else
-      echo "==> Skipping AppImage (--no-appimage/--only-*)"
-    fi
+    echo "==> Skipping AppImage (--no-appimage/--only-*)"
   fi
 
-  if [[ "$DO_FLATPAK" == "1" ]] && command -v flatpak-builder >/dev/null 2>&1; then
+  if [[ "$DO_FLATPAK" == "1" ]]; then
     echo "==> Building Flatpak"
     FLATPAK_STAGE="$ARTIFACTS/linux-x64/flatpak-build"
     FLATPAK_REPO="$ARTIFACTS/flatpak-repo"
@@ -286,11 +288,7 @@ EOF
       --install-deps-from=flathub --install-deps-from=flathub-beta \
       "$ROOT/packaging/flatpak/dev.hyprism.HyPrism.json" --repo="$FLATPAK_REPO"
   else
-    if [[ "$DO_FLATPAK" == "1" ]]; then
-      echo "!! flatpak-builder not found; skipping Flatpak"
-    else
-      echo "==> Skipping Flatpak (--no-flatpak/--only-*)"
-    fi
+    echo "==> Skipping Flatpak (--no-flatpak/--only-*)"
   fi
 fi
 
