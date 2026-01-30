@@ -80,39 +80,7 @@ jobs:
             artifacts/HyPrism-linux-x64.tar.gz
             artifacts/HyPrism-linux-arm64.tar.gz
 
-  build-frontend:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Build frontend
-        run: |
-          cd frontend
-          npm ci
-          npm run build
-          # Vite is configured to write to ../wwwroot (see frontend/vite.config.ts)
-          # Verify output exists and fail the job if not
-          if [ -d "../wwwroot" ] && [ "$(ls -A ../wwwroot | wc -c)" -gt 0 ]; then
-            echo "Frontend build succeeded and ../wwwroot is populated"
-            ls -la ../wwwroot | sed -n '1,200p'
-          else
-            echo "ERROR: Frontend build did not produce expected output in ../wwwroot"
-            ls -la .. | sed -n '1,200p'
-            exit 1
-          fi
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: wwwroot/**
-
-  publish-backend:
+  generate-linux-bundle:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -122,170 +90,82 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore & Publish backend
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Determine version for Linux packages
         run: |
-          dotnet restore
-          dotnet publish ./HyPrism.csproj -c Release -r linux-x64 --self-contained true \
-            /p:PublishSingleFile=true /p:PublishReadyToRun=true \
-            /p:IncludeNativeLibrariesForSelfExtract=true /p:IncludeAllContentForSelfExtract=true \
-            -o artifacts/linux-x64
-          dotnet publish ./HyPrism.csproj -c Release -r linux-arm64 --self-contained true \
-            /p:PublishSingleFile=true /p:PublishReadyToRun=true \
-            /p:IncludeNativeLibrariesForSelfExtract=true /p:IncludeAllContentForSelfExtract=true \
-            -o artifacts/linux-arm64
-
-          # Ensure the published single-file binaries are executable so downstream packaging works
-          chmod +x artifacts/linux-x64/HyPrism || true
-          chmod +x artifacts/linux-arm64/HyPrism || true
-          echo "Post-publish listing (linux-x64):"; ls -la artifacts/linux-x64 | sed -n '1,200p' || true
-
-      - name: Upload backend publish
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-publish
-          path: |
-            artifacts/linux-x64/**
-            artifacts/linux-arm64/**
-
-  assemble-linux-publish:
-    needs: [build-frontend, publish-backend]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend-dist
-
-      - name: Download backend publish
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-publish
-          path: artifacts
-
-      - name: Verify downloaded backend publish ⚠️
-        run: |
-          if [ ! -d "artifacts/linux-x64" ] || [ "$(ls -A artifacts/linux-x64 | wc -c)" -eq 0 ]; then
-            echo "ERROR: backend-publish artifact is missing or empty after download. Ensure publish-backend produced and uploaded it."
-            echo "Contents of artifacts directory:"; ls -la artifacts || true
+          set -euo pipefail
+          if [ ! -f app.manifest ]; then
+            echo "ERROR: app.manifest not found"
             exit 1
           fi
-          echo "Downloaded backend publish contains:"; ls -la artifacts/linux-x64 | sed -n '1,200p'
-          if [ ! -x artifacts/linux-x64/HyPrism ]; then
-            echo "HyPrism binary not executable; attempting to set executable bit"
-            chmod +x artifacts/linux-x64/HyPrism || true
-            echo "Post-chmod listing:"; ls -la artifacts/linux-x64 || true
-          fi
-
-      - name: Merge frontend into publish
-        run: |
-          # Fail if frontend artifact wasn't produced
-          if [ ! -d "frontend-dist" ] || [ "$(ls -A frontend-dist | wc -c)" -eq 0 ]; then
-            echo "ERROR: frontend-dist is missing or empty. Ensure build-frontend produced the artifact."
-            ls -la | sed -n '1,200p'
+          RAW=$(grep -oP 'assemblyIdentity\s+[^>]*version="\K[^"]+' app.manifest || true)
+          if [ -z "$RAW" ]; then
+            echo "ERROR: could not parse version from app.manifest"
             exit 1
           fi
+          IFS=. read -r MAJOR MINOR PATCH REST <<<"$RAW"
+          PATCH=${PATCH:-0}
+          VERSION="$MAJOR.$MINOR.$PATCH"
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "::warning::Version overridden by workflow input (discouraged). Prefer updating app.manifest to keep it authoritative."
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-          # Copy frontend dist into both linux publish outputs
-          mkdir -p artifacts/linux-x64/wwwroot
-          mkdir -p artifacts/linux-arm64/wwwroot
-          cp -R frontend-dist/* artifacts/linux-x64/wwwroot/ || true
-          cp -R frontend-dist/* artifacts/linux-arm64/wwwroot/ || true
-
-      - name: Create tar.gz archives
+      - name: Generate Linux bundle via script
         run: |
-          cd artifacts/linux-x64 && tar -czf ../HyPrism-linux-x64.tar.gz . && cd ../..
-          cd artifacts/linux-arm64 && tar -czf ../HyPrism-linux-arm64.tar.gz . && cd ../..
+          ./scripts/build-linux.sh --auto-install-deps --only-bundle
 
-      - name: Upload linux publish
+      - name: Normalize Linux tarballs
+        run: |
+          set -euo pipefail
+          if [ -f artifacts/HyPrism-linux-x64-portable.tar.gz ] && [ ! -f artifacts/HyPrism-linux-x64.tar.gz ]; then
+            mv artifacts/HyPrism-linux-x64-portable.tar.gz artifacts/HyPrism-linux-x64.tar.gz
+          fi
+          if [ -f artifacts/HyPrism-linux-arm64-portable.tar.gz ] && [ ! -f artifacts/HyPrism-linux-arm64.tar.gz ]; then
+            mv artifacts/HyPrism-linux-arm64-portable.tar.gz artifacts/HyPrism-linux-arm64.tar.gz
+          fi
+          ls -la artifacts | sed -n '1,200p'
+
+      - name: Upload Linux bundle artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-publish
+          name: linux-bundle
           path: |
-            artifacts/linux-x64/**
-            artifacts/linux-arm64/**
+            packaging/flatpak/bundle/**
+            artifacts/linux-x64/portable/**
             artifacts/HyPrism-linux-x64.tar.gz
             artifacts/HyPrism-linux-arm64.tar.gz
 
   package-appimage:
-    needs: assemble-linux-publish
+    needs: generate-linux-bundle
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download linux publish
+      - name: Download Linux bundle
         uses: actions/download-artifact@v4
         with:
-          name: linux-publish
+          name: linux-bundle
           path: .
 
-      - name: Normalize and verify linux publish artifact ⚠️
+      - name: Install AppImage tool (if missing)
         run: |
-          set -euo pipefail
-          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
-
-          FOUND=""
-          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found artifacts/linux-x64"
-            FOUND="artifacts/linux-x64"
-          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found linux-x64 at top-level; moving to artifacts/"
-            mkdir -p artifacts
-            mv linux-x64 artifacts/
-            FOUND="artifacts/linux-x64"
-          elif [ -f "HyPrism" ]; then
-            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
-            mkdir -p artifacts/linux-x64
-            mv HyPrism* artifacts/linux-x64/ || true
-            FOUND="artifacts/linux-x64"
-          else
-            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
-            if [ -n "$LOC" ]; then
-              DIR=$(dirname "$LOC")
-              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
-              mkdir -p artifacts/linux-x64
-              cp -R "$DIR"/* artifacts/linux-x64/
-              FOUND="artifacts/linux-x64"
-            fi
+          if ! command -v appimagetool >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y libfuse2 || true
+            curl -fsSL -o /tmp/appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+            chmod +x /tmp/appimagetool
+            sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
           fi
 
-          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
-            echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Workspace listing:"; ls -la | sed -n '1,200p'
-            exit 1
-          fi
-
-          echo "Normalized artifact directory: $FOUND"
-          ls -la "$FOUND" | sed -n '1,200p'
-          chmod +x "$FOUND"/HyPrism || true
-
-      - name: Install appimagetool
+      - name: Build AppImage via script
         run: |
-          sudo apt-get update
-          # Ensure FUSE runtime is available so AppImages can run during checks
-          sudo apt-get install -y libfuse2 || true
-          curl -fsSL -o /tmp/appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-          chmod +x /tmp/appimagetool
-          sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
-
-      - name: Create AppImage
-        run: |
-          mkdir -p AppDir/usr/bin AppDir/usr/lib/hyprism AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
-          cp -R artifacts/linux-x64/* AppDir/usr/lib/hyprism/ || true
-          chmod +x AppDir/usr/lib/hyprism/HyPrism || true
-          ln -sf ../lib/hyprism/HyPrism AppDir/usr/bin/HyPrism
-          cp packaging/flatpak/dev.hyprism.HyPrism.desktop AppDir/usr/share/applications/ || true
-          cp packaging/flatpak/dev.hyprism.HyPrism.png AppDir/usr/share/icons/hicolor/256x256/apps/ || true
-          cp packaging/flatpak/dev.hyprism.HyPrism.png AppDir/ || true
-          cat > AppDir/AppRun << 'EOF'
-          #!/bin/sh
-          exec "$(dirname "$0")/usr/lib/hyprism/HyPrism" "$@"
-          EOF
-          chmod +x AppDir/AppRun
-          ln -sf usr/share/applications/dev.hyprism.HyPrism.desktop AppDir/HyPrism.desktop || true
-          ARCH=x86_64 appimagetool -n AppDir artifacts/HyPrism-linux-x64.AppImage
+          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-appimage
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
@@ -294,102 +174,20 @@ jobs:
           path: artifacts/HyPrism-linux-x64.AppImage
 
   package-flatpak:
-    needs: assemble-linux-publish
+    needs: generate-linux-bundle
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download linux publish
+      - name: Download Linux bundle
         uses: actions/download-artifact@v4
         with:
-          name: linux-publish
+          name: linux-bundle
           path: .
 
-      - name: Normalize and verify linux publish artifact ⚠️
+      - name: Build Flatpak via script
         run: |
-          set -euo pipefail
-          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
-
-          FOUND=""
-          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found artifacts/linux-x64"
-            FOUND="artifacts/linux-x64"
-          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found linux-x64 at top-level; moving to artifacts/"
-            mkdir -p artifacts
-            mv linux-x64 artifacts/
-            FOUND="artifacts/linux-x64"
-          elif [ -f "HyPrism" ]; then
-            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
-            mkdir -p artifacts/linux-x64
-            mv HyPrism* artifacts/linux-x64/ || true
-            FOUND="artifacts/linux-x64"
-          else
-            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
-            if [ -n "$LOC" ]; then
-              DIR=$(dirname "$LOC")
-              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
-              mkdir -p artifacts/linux-x64
-              cp -R "$DIR"/* artifacts/linux-x64/
-              FOUND="artifacts/linux-x64"
-            fi
-          fi
-
-          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
-            echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Workspace listing:"; ls -la | sed -n '1,200p'
-            exit 1
-          fi
-
-          echo "Normalized artifact directory: $FOUND"
-          ls -la "$FOUND" | sed -n '1,200p'
-          chmod +x "$FOUND"/HyPrism || true
-
-      - name: Build Flatpak
-        run: |
-          set -euo pipefail
-
-          # Prepare bundle from linux-x64 artifacts (place into packaging/flatpak so manifest sources match)
-          rm -rf packaging/flatpak/bundle || true
-          mkdir -p packaging/flatpak/bundle
-          cp -R artifacts/linux-x64/* packaging/flatpak/bundle/ || true
-          cp packaging/flatpak/dev.hyprism.HyPrism.* packaging/flatpak/bundle/ || true
-          chmod +x packaging/flatpak/bundle/HyPrism || true
-
-          # Sanity check: ensure HyPrism binary is present and executable
-          if [ ! -x packaging/flatpak/bundle/HyPrism ]; then
-            echo "ERROR: packaging/flatpak/bundle/HyPrism missing or not executable"
-            ls -la packaging/flatpak/bundle || true
-            exit 1
-          fi
-
-          # Install flatpak tooling
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder || true
-
-          # Configure remotes: flathub and flathub-beta
-          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak remote-add --user --if-not-exists flathub-beta https://flathub.org/beta-repo/flathub-beta.flatpakrepo
-
-          # Build with dependencies pulled from flathub and flathub-beta
-          flatpak-builder --user --force-clean --repo=repo builddir --install-deps-from=flathub --install-deps-from=flathub-beta packaging/flatpak/dev.hyprism.HyPrism.json > flatpak-build.log 2>&1 || true
-
-          # If repo was created, try to create a bundle
-          if [ -d repo ] && [ "$(ls -A repo | wc -c)" -gt 0 ]; then
-            flatpak build-bundle repo artifacts/HyPrism.flatpak dev.hyprism.HyPrism >> flatpak-build.log 2>&1 || true
-          fi
-
-          mkdir -p artifacts
-          cp flatpak-build.log artifacts/flatpak-build.log || true
-
-          if [ ! -f artifacts/HyPrism.flatpak ]; then
-            echo "ERROR: artifacts/HyPrism.flatpak not produced by flatpak build. See artifacts/flatpak-build.log for details."
-            echo "----- flatpak-build.log (head) -----"
-            sed -n '1,400p' artifacts/flatpak-build.log || true
-            echo "----- flatpak-build.log (tail) -----"
-            tail -n 200 artifacts/flatpak-build.log || true
-            exit 1
-          fi
+          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-flatpak
 
       - name: Upload Flatpak artifact
         uses: actions/upload-artifact@v4
@@ -398,89 +196,42 @@ jobs:
           path: artifacts/HyPrism.flatpak
           if-no-files-found: warn
 
-      - name: Upload Flatpak build log (always)
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: flatpak-build-log
-          path: artifacts/flatpak-build.log
-          if-no-files-found: warn
-
   package-deb-rpm:
-    needs: assemble-linux-publish
+    needs: generate-linux-bundle
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download linux publish
+      - name: Download Linux bundle
         uses: actions/download-artifact@v4
         with:
-          name: linux-publish
+          name: linux-bundle
           path: .
 
-      - name: Normalize and verify linux publish artifact ⚠️
+      - name: Determine version for Linux packages
         run: |
           set -euo pipefail
-          echo "Workspace root listing (partial):"; ls -la | sed -n '1,200p'
-
-          FOUND=""
-          if [ -d "artifacts/linux-x64" ] && [ "$(ls -A artifacts/linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found artifacts/linux-x64"
-            FOUND="artifacts/linux-x64"
-          elif [ -d "linux-x64" ] && [ "$(ls -A linux-x64 | wc -c)" -gt 0 ]; then
-            echo "Found linux-x64 at top-level; moving to artifacts/"
-            mkdir -p artifacts
-            mv linux-x64 artifacts/
-            FOUND="artifacts/linux-x64"
-          elif [ -f "HyPrism" ]; then
-            echo "Found HyPrism at top-level; creating artifacts/linux-x64 and moving files"
-            mkdir -p artifacts/linux-x64
-            mv HyPrism* artifacts/linux-x64/ || true
-            FOUND="artifacts/linux-x64"
-          else
-            LOC=$(find . -type f -name 'HyPrism' -print -quit || true)
-            if [ -n "$LOC" ]; then
-              DIR=$(dirname "$LOC")
-              echo "Found HyPrism at $LOC; copying $DIR -> artifacts/linux-x64"
-              mkdir -p artifacts/linux-x64
-              cp -R "$DIR"/* artifacts/linux-x64/
-              FOUND="artifacts/linux-x64"
-            fi
-          fi
-
-          if [ -z "$FOUND" ] || [ ! -d "$FOUND" ] || [ "$(ls -A "$FOUND" | wc -c)" -eq 0 ]; then
-            echo "ERROR: linux-publish artifact missing or empty. Ensure assemble-linux-publish succeeded."
-            echo "Workspace listing:"; ls -la | sed -n '1,200p'
+          if [ ! -f app.manifest ]; then
+            echo "ERROR: app.manifest not found"
             exit 1
           fi
+          RAW=$(grep -oP 'assemblyIdentity\s+[^>]*version="\K[^"]+' app.manifest || true)
+          if [ -z "$RAW" ]; then
+            echo "ERROR: could not parse version from app.manifest"
+            exit 1
+          fi
+          IFS=. read -r MAJOR MINOR PATCH REST <<<"$RAW"
+          PATCH=${PATCH:-0}
+          VERSION="$MAJOR.$MINOR.$PATCH"
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "::warning::Version overridden by workflow input (discouraged). Prefer updating app.manifest to keep it authoritative."
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-          echo "Normalized artifact directory: $FOUND"
-          ls -la "$FOUND" | sed -n '1,200p'
-          chmod +x "$FOUND"/HyPrism || true
-
-      - name: Install packaging tools
+      - name: Build deb/rpm via script
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential rpm
-          sudo gem install --no-document fpm || true
-
-      - name: Create .deb and .rpm
-        run: |
-          mkdir -p pkg/opt/hyprism pkg/usr/bin pkg/usr/share/applications pkg/usr/share/icons/hicolor/256x256/apps
-          cp -R artifacts/linux-x64/* pkg/opt/hyprism/
-          chmod +x pkg/opt/hyprism/HyPrism || true
-          ln -sf /opt/hyprism/HyPrism pkg/usr/bin/hyprism
-          ln -sf /opt/hyprism/HyPrism pkg/usr/bin/HyPrism
-          cp packaging/flatpak/dev.hyprism.HyPrism.desktop pkg/usr/share/applications/ || true
-          cp packaging/flatpak/dev.hyprism.HyPrism.png pkg/usr/share/icons/hicolor/256x256/apps/ || true
-          fpm -s dir -t deb -n hyprism -v ${GITHUB_REF_NAME#v} -C pkg \
-            --description "HyPrism - Hytale Launcher" \
-            --url "https://github.com/HyPrism/HyPrism" \
-            -p artifacts/HyPrism-linux-x64.deb .
-          fpm -s dir -t rpm -n hyprism -v ${GITHUB_REF_NAME#v} -C pkg \
-            --description "HyPrism - Hytale Launcher" \
-            --url "https://github.com/HyPrism/HyPrism" \
-            -p artifacts/HyPrism-linux-x64.rpm .
+          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-deb
 
       - name: Upload deb/rpm artifacts
         uses: actions/upload-artifact@v4

@@ -9,6 +9,8 @@ AUTO_INSTALL="${AUTO_INSTALL:-0}"
 REMOTE_LINUX_HOST="${REMOTE_LINUX_HOST:-${REMOTE_HOST:-}}"
 REMOTE_LINUX_PATH="${REMOTE_LINUX_PATH:-${REMOTE_PATH:-~/HyPrism}}"
 SKIP_REMOTE="${SKIP_REMOTE:-0}"
+ONLY_BUNDLE=0
+SKIP_BUILD="${SKIP_BUILD:-0}"
 
 show_help() {
   cat <<'EOF'
@@ -17,6 +19,7 @@ Usage: ./$0 [options]
 Options:
   --help                Show this help message and exit
   --auto-install-deps   Auto-install missing dependencies (Ubuntu/Fedora)
+  --only-bundle         Build only the bundle (skip all packaging)
   --no-appimage         Skip AppImage packaging
   --no-flatpak          Skip Flatpak packaging
   --no-deb              Skip deb/rpm packaging
@@ -39,6 +42,12 @@ for arg in "$@"; do
       ;;
     --auto-install-deps)
       AUTO_INSTALL=1
+      ;;
+    --only-bundle)
+      ONLY_BUNDLE=1
+      DO_APPIMAGE=0
+      DO_FLATPAK=0
+      DO_DEB=0
       ;;
     --no-appimage)
       DO_APPIMAGE=0
@@ -69,6 +78,16 @@ for arg in "$@"; do
   esac
 done
 
+if [[ "$ONLY_BUNDLE" == "1" ]]; then
+  RIDS=("linux-x64" "linux-arm64")
+elif [[ "$DO_APPIMAGE" == "1" && "$DO_FLATPAK" == "0" && "$DO_DEB" == "0" ]]; then
+  RIDS=("linux-x64")
+elif [[ "$DO_FLATPAK" == "1" && "$DO_APPIMAGE" == "0" && "$DO_DEB" == "0" ]]; then
+  RIDS=("linux-x64")
+elif [[ "$DO_DEB" == "1" && "$DO_APPIMAGE" == "0" && "$DO_FLATPAK" == "0" ]]; then
+  RIDS=("linux-x64")
+fi
+
 if [[ "$(uname -s)" == "Linux" ]]; then
   detect_distro() {
     if [[ -f /etc/os-release ]]; then
@@ -87,10 +106,13 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 
     case "$distro" in
       ubuntu|debian)
-        sudo apt-get update -y && sudo apt-get install -y $ubuntu_pkgs || true
+        # Non-interactive installs for CI / automation; avoid tzdata and config prompts
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" $ubuntu_pkgs || true
         ;;
       fedora)
-        sudo dnf install -y $fedora_pkgs || true
+        # Use -y to avoid interactive prompts
+        sudo dnf -y install $fedora_pkgs || true
         ;;
       *)
         return 1
@@ -118,43 +140,79 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   }
 
   # Packaging helpers often missing on fresh VMs
-  ensure_tool fpm "ruby ruby-dev rubygems build-essential rpm" "ruby ruby-devel rubygems @development-tools rpm-build" "command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm"
-  ensure_tool appimagetool "appimagetool" "appimagetool" ""
-  ensure_tool flatpak-builder "flatpak flatpak-builder flatpak-builder-libs" "flatpak flatpak-builder appstream-util desktop-file-utils" ""
+  if [[ "$ONLY_BUNDLE" != "1" ]]; then
+    if [[ "$DO_DEB" == "1" ]]; then
+      ensure_tool fpm "ruby ruby-dev rubygems build-essential rpm" "ruby ruby-devel rubygems @development-tools rpm-build" "command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm"
+    fi
+    if [[ "$DO_APPIMAGE" == "1" ]]; then
+      ensure_tool appimagetool "appimagetool" "appimagetool" ""
+    fi
+    if [[ "$DO_FLATPAK" == "1" ]]; then
+      ensure_tool flatpak-builder "flatpak flatpak-builder flatpak-builder-libs" "flatpak flatpak-builder appstream-util desktop-file-utils" ""
+    fi
+  fi
 fi
 
 mkdir -p "$ARTIFACTS"
 
-echo "==> Building frontend"
-if [[ -f "$ROOT/frontend/package-lock.json" ]]; then
-  (cd "$ROOT/frontend" && npm ci)
+if [[ "$SKIP_BUILD" == "1" ]]; then
+  echo "==> Skipping frontend + publish (SKIP_BUILD=1)"
+  if [[ -d "$ROOT/packaging/flatpak/bundle" && ! -d "$ARTIFACTS/linux-x64/portable" ]]; then
+    mkdir -p "$ARTIFACTS/linux-x64/portable"
+    cp -R "$ROOT/packaging/flatpak/bundle"/* "$ARTIFACTS/linux-x64/portable/" || true
+  fi
+
+  if [[ ! -f "$ARTIFACTS/linux-x64/portable/HyPrism" ]]; then
+    echo "ERROR: artifacts/linux-x64/portable/HyPrism is missing. Run --only-bundle first or provide bundle." >&2
+    exit 1
+  fi
 else
-  (cd "$ROOT/frontend" && npm install)
+  echo "==> Building frontend"
+  if [[ -f "$ROOT/frontend/package-lock.json" ]]; then
+    # Use CI mode and disable audit/funding prompts to be non-interactive
+    (cd "$ROOT/frontend" && CI=1 npm ci --no-audit --no-fund --silent)
+  else
+    (cd "$ROOT/frontend" && CI=1 npm install --no-audit --no-fund --silent)
+  fi
+  # Force non-interactive build and minimal output
+  (cd "$ROOT/frontend" && CI=1 npm run build --silent)
+
+  echo "==> Restoring and publishing backend"
+  dotnet restore "$ROOT/HyPrism.csproj"
+
+  for rid in "${RIDS[@]}"; do
+    out="$ARTIFACTS/$rid/portable"
+    echo "--> Publishing $rid to $out"
+    dotnet publish "$ROOT/HyPrism.csproj" -c Release -r "$rid" --self-contained true \
+      /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesForSelfExtract=true \
+      -o "$out"
+
+    case "$rid" in
+      win-*)
+        (cd "$out" && zip -9 -r "$ARTIFACTS/HyPrism-${rid}-portable.zip" .)
+        ;;
+      osx-*)
+        (cd "$out" && zip -9 -r "$ARTIFACTS/HyPrism-${rid}-portable.zip" .)
+        ;;
+      linux-*)
+        tar -czf "$ARTIFACTS/HyPrism-${rid}-portable.tar.gz" -C "$out" .
+        ;;
+    esac
+  done
 fi
-(cd "$ROOT/frontend" && npm run build)
 
-echo "==> Restoring and publishing backend"
-dotnet restore "$ROOT/HyPrism.csproj"
-
-for rid in "${RIDS[@]}"; do
-  out="$ARTIFACTS/$rid/portable"
-  echo "--> Publishing $rid to $out"
-  dotnet publish "$ROOT/HyPrism.csproj" -c Release -r "$rid" --self-contained true \
-    /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesForSelfExtract=true \
-    -o "$out"
-
-  case "$rid" in
-    win-*)
-      (cd "$out" && zip -9 -r "$ARTIFACTS/HyPrism-${rid}-portable.zip" .)
-      ;;
-    osx-*)
-      (cd "$out" && zip -9 -r "$ARTIFACTS/HyPrism-${rid}-portable.zip" .)
-      ;;
-    linux-*)
-      tar -czf "$ARTIFACTS/HyPrism-${rid}-portable.tar.gz" -C "$out" .
-      ;;
-  esac
-done
+if [[ "$ONLY_BUNDLE" == "1" && "$(uname -s)" == "Linux" ]]; then
+  echo "==> Preparing bundle only"
+  LINUX_OUT="$ARTIFACTS/linux-x64/portable"
+  rm -rf "$ROOT/packaging/flatpak/bundle"
+  mkdir -p "$ROOT/packaging/flatpak/bundle"
+  cp -R "$LINUX_OUT"/* "$ROOT/packaging/flatpak/bundle/" || true
+  cp "$ROOT/packaging/flatpak/dev.hyprism.HyPrism."* "$ROOT/packaging/flatpak/bundle/" || true
+  chmod +x "$ROOT/packaging/flatpak/bundle/HyPrism" || true
+  echo "Bundle ready at $ROOT/packaging/flatpak/bundle"
+  echo "Done. Artifacts in $ARTIFACTS"
+  exit 0
+fi
 
 # Linux-only packaging helpers
 if [[ "$(uname -s)" == "Linux" ]]; then
@@ -202,6 +260,8 @@ exec "$(dirname "$0")/usr/bin/HyPrism" "$@"
 EOF
     chmod +x "$APPDIR/AppRun"
     (cd "$APPDIR" && ln -sf usr/share/applications/dev.hyprism.HyPrism.desktop HyPrism.desktop)
+    # Remove existing artifact to avoid interactive overwrite prompts
+    rm -f "$ARTIFACTS/HyPrism-linux-x64.AppImage"
     appimagetool "$APPDIR" "$ARTIFACTS/HyPrism-linux-x64.AppImage"
   else
     if [[ "$DO_APPIMAGE" == "1" ]]; then
@@ -237,7 +297,7 @@ fi
 # Optional: trigger remote Linux build (e.g., Parallels VM) after local steps
 if [[ -n "$REMOTE_LINUX_HOST" && "$SKIP_REMOTE" != "1" ]]; then
   echo "==> Triggering remote build on $REMOTE_LINUX_HOST ($REMOTE_LINUX_PATH)"
-  ssh "$REMOTE_LINUX_HOST" "cd '$REMOTE_LINUX_PATH' && SKIP_REMOTE=1 ./scripts/build-all.sh --auto-install-deps" || {
+  ssh -o BatchMode=yes "$REMOTE_LINUX_HOST" "cd '$REMOTE_LINUX_PATH' && SKIP_REMOTE=1 ./scripts/build-all.sh --auto-install-deps" || {
     echo "!! Remote build failed on $REMOTE_LINUX_HOST" >&2
     exit 1
   }
