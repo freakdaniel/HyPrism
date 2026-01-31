@@ -515,7 +515,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          tag_name: v${{ steps.determine_version.outputs.version }}
+          tag: v${{ steps.determine_version.outputs.version }}
           name: HyPrism v${{ steps.determine_version.outputs.version }}
           body: |
             ## HyPrism v${{ steps.determine_version.outputs.version }}
