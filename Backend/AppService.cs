@@ -4253,45 +4253,14 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
         Logger.Info("Game", $"Online Mode: {_config.OnlineMode}");
         Logger.Info("Game", $"Session UUID: {sessionUuid}");
 
-        // Build arguments - use only documented game arguments
-        var gameArgs = new List<string>
-        {
-            $"--app-dir \"{gameDir}\"",
-            $"--user-dir \"{userDataDir}\"",
-            $"--java-exec \"{javaPath}\"",
-            $"--name \"{_config.Nick}\""
-        };
-        
-        // Add auth mode based on user's OnlineMode preference
-        // If OnlineMode is OFF, always use offline mode regardless of tokens
-        // If OnlineMode is ON and we have tokens, use authenticated mode
-        if (_config.OnlineMode && !string.IsNullOrEmpty(identityToken) && !string.IsNullOrEmpty(sessionToken))
-        {
-            gameArgs.Add("--auth-mode authenticated");
-            gameArgs.Add($"--uuid \"{sessionUuid}\"");
-            gameArgs.Add($"--identity-token \"{identityToken}\"");
-            gameArgs.Add($"--session-token \"{sessionToken}\"");
-            Logger.Info("Game", $"Using authenticated mode with session UUID: {sessionUuid}");
-        }
-        else
-        {
-            // Offline mode - either user selected it or no tokens available
-            gameArgs.Add("--auth-mode offline");
-            gameArgs.Add($"--uuid \"{sessionUuid}\"");
-            Logger.Info("Game", $"Using offline mode with UUID: {sessionUuid}");
-        }
-
         // On macOS/Linux, create a launch script to run with clean environment
         ProcessStartInfo startInfo;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            // Build the full argument string for Windows
-            string argsString = string.Join(" ", gameArgs);
-            
+            // Windows: Use ArgumentList for proper escaping
             startInfo = new ProcessStartInfo
             {
                 FileName = executable,
-                Arguments = argsString,
                 WorkingDirectory = workingDir,
                 UseShellExecute = false,
                 CreateNoWindow = false,
@@ -4299,10 +4268,72 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
                 RedirectStandardError = false
             };
             
-            Logger.Info("Game", $"Windows launch args: {argsString}");
+            // Add arguments using ArgumentList for proper Windows escaping
+            startInfo.ArgumentList.Add("--app-dir");
+            startInfo.ArgumentList.Add(gameDir);
+            startInfo.ArgumentList.Add("--user-dir");
+            startInfo.ArgumentList.Add(userDataDir);
+            startInfo.ArgumentList.Add("--java-exec");
+            startInfo.ArgumentList.Add(javaPath);
+            startInfo.ArgumentList.Add("--name");
+            startInfo.ArgumentList.Add(_config.Nick);
+            
+            // Add auth mode based on user's OnlineMode preference
+            // If OnlineMode is OFF, always use offline mode regardless of tokens
+            // If OnlineMode is ON and we have tokens, use authenticated mode
+            if (_config.OnlineMode && !string.IsNullOrEmpty(identityToken) && !string.IsNullOrEmpty(sessionToken))
+            {
+                startInfo.ArgumentList.Add("--auth-mode");
+                startInfo.ArgumentList.Add("authenticated");
+                startInfo.ArgumentList.Add("--uuid");
+                startInfo.ArgumentList.Add(sessionUuid);
+                startInfo.ArgumentList.Add("--identity-token");
+                startInfo.ArgumentList.Add(identityToken);
+                startInfo.ArgumentList.Add("--session-token");
+                startInfo.ArgumentList.Add(sessionToken);
+                Logger.Info("Game", $"Using authenticated mode with session UUID: {sessionUuid}");
+            }
+            else
+            {
+                // Offline mode - either user selected it or no tokens available
+                startInfo.ArgumentList.Add("--auth-mode");
+                startInfo.ArgumentList.Add("offline");
+                startInfo.ArgumentList.Add("--uuid");
+                startInfo.ArgumentList.Add(sessionUuid);
+                Logger.Info("Game", $"Using offline mode with UUID: {sessionUuid}");
+            }
+            
+            // Log the arguments for debugging
+            Logger.Info("Game", $"Windows launch args: {string.Join(" ", startInfo.ArgumentList)}");
         }
         else
         {
+            // Build arguments for the launch script - use only documented game arguments
+            var gameArgs = new List<string>
+            {
+                $"--app-dir \"{gameDir}\"",
+                $"--user-dir \"{userDataDir}\"",
+                $"--java-exec \"{javaPath}\"",
+                $"--name \"{_config.Nick}\""
+            };
+            
+            // Add auth mode based on user's OnlineMode preference
+            if (_config.OnlineMode && !string.IsNullOrEmpty(identityToken) && !string.IsNullOrEmpty(sessionToken))
+            {
+                gameArgs.Add("--auth-mode authenticated");
+                gameArgs.Add($"--uuid \"{sessionUuid}\"");
+                gameArgs.Add($"--identity-token \"{identityToken}\"");
+                gameArgs.Add($"--session-token \"{sessionToken}\"");
+                Logger.Info("Game", $"Using authenticated mode with session UUID: {sessionUuid}");
+            }
+            else
+            {
+                // Offline mode - either user selected it or no tokens available
+                gameArgs.Add("--auth-mode offline");
+                gameArgs.Add($"--uuid \"{sessionUuid}\"");
+                Logger.Info("Game", $"Using offline mode with UUID: {sessionUuid}");
+            }
+            
             // macOS/Linux: Use env to run with completely clean environment
             // This prevents .NET runtime environment variables from interfering
             string argsString = string.Join(" ", gameArgs);
