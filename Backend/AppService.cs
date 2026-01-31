@@ -1938,7 +1938,12 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
         }
     }
 
-    public string GetLauncherVersion() => "2.0.1";
+    public string GetLauncherVersion()
+    {
+        // For testing: release = 2.0.2, pre-release/beta = 2.0.3
+        var branch = GetLauncherBranch();
+        return branch == "beta" ? "2.0.3" : "2.0.2";
+    }
 
     /// <summary>
     /// Check if Rosetta 2 is installed on macOS Apple Silicon.
@@ -2716,6 +2721,25 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
                     }
                 }
                 
+                // Ensure VC++ Redistributable is installed on Windows before launching
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    SendProgress(window, "install", 94, "Checking Visual C++ Runtime...", 0, 0);
+                    try
+                    {
+                        await EnsureVCRedistInstalledAsync((progress, message) =>
+                        {
+                            int mappedProgress = 94 + (int)(progress * 0.02);
+                            SendProgress(window, "install", mappedProgress, message, 0, 0);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("VCRedist", $"VC++ install warning: {ex.Message}");
+                        // Don't fail - continue anyway
+                    }
+                }
+                
                 // Just ensure JRE is available (download if needed, but don't touch the game)
                 string jrePath = GetJavaPath();
                 if (!File.Exists(jrePath))
@@ -2825,6 +2849,25 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
             }
             
             SendProgress(window, "complete", 95, "Download complete!", 0, 0);
+
+            // Ensure VC++ Redistributable is installed on Windows before launching
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                SendProgress(window, "install", 95, "Checking Visual C++ Runtime...", 0, 0);
+                try
+                {
+                    await EnsureVCRedistInstalledAsync((progress, message) =>
+                    {
+                        int mappedProgress = 95 + (int)(progress * 0.01);
+                        SendProgress(window, "install", mappedProgress, message, 0, 0);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning("VCRedist", $"VC++ install warning: {ex.Message}");
+                    // Don't fail - continue anyway
+                }
+            }
 
             // Ensure JRE is installed before launching
             SendProgress(window, "install", 96, "Checking Java Runtime...", 0, 0);
@@ -3134,6 +3177,152 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
 
     // JRE Download - uses official Hytale JRE from launcher.hytale.com
     private const string RequiredJreVersion = "25.0.1_8";
+    
+    // VC++ Redistributable for Windows
+    private const string VCRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+    
+    /// <summary>
+    /// Checks if Visual C++ Redistributable is installed on Windows.
+    /// Returns true if installed or not on Windows.
+    /// </summary>
+    private bool IsVCRedistInstalled()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return true;
+        
+        try
+        {
+            // Check for VC++ 2015-2022 Redistributable (x64) in registry
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64");
+            if (key != null)
+            {
+                var installed = key.GetValue("Installed");
+                if (installed != null && (int)installed == 1)
+                {
+                    Logger.Info("VCRedist", "VC++ Redistributable is already installed");
+                    return true;
+                }
+            }
+            
+            // Also check alternative registry path
+            using var key2 = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Wow6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64");
+            if (key2 != null)
+            {
+                var installed = key2.GetValue("Installed");
+                if (installed != null && (int)installed == 1)
+                {
+                    Logger.Info("VCRedist", "VC++ Redistributable is already installed (WoW64)");
+                    return true;
+                }
+            }
+            
+            Logger.Info("VCRedist", "VC++ Redistributable not found");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("VCRedist", $"Failed to check VC++ Redistributable: {ex.Message}");
+            return false; // Assume not installed if we can't check
+        }
+    }
+    
+    /// <summary>
+    /// Ensures Visual C++ Redistributable is installed on Windows.
+    /// Downloads and runs the installer if not present.
+    /// </summary>
+    private async Task EnsureVCRedistInstalledAsync(Action<int, string> progressCallback)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            progressCallback(100, "VC++ not required on this platform");
+            return;
+        }
+        
+        if (IsVCRedistInstalled())
+        {
+            progressCallback(100, "VC++ Redistributable ready");
+            return;
+        }
+        
+        progressCallback(0, "Downloading Visual C++ Redistributable...");
+        Logger.Info("VCRedist", "Downloading VC++ Redistributable...");
+        
+        string cacheDir = Path.Combine(_appDir, "cache");
+        Directory.CreateDirectory(cacheDir);
+        string installerPath = Path.Combine(cacheDir, "vc_redist.x64.exe");
+        
+        try
+        {
+            // Download the installer
+            using var response = await HttpClient.GetAsync(VCRedistUrl, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            
+            var totalBytes = response.Content.Headers.ContentLength ?? 0;
+            using var contentStream = await response.Content.ReadAsStreamAsync();
+            using var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+            
+            var buffer = new byte[8192];
+            long downloadedBytes = 0;
+            int bytesRead;
+            
+            while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                await fileStream.WriteAsync(buffer, 0, bytesRead);
+                downloadedBytes += bytesRead;
+                
+                if (totalBytes > 0)
+                {
+                    int percent = (int)((downloadedBytes * 50) / totalBytes); // 0-50%
+                    progressCallback(percent, $"Downloading VC++ Redistributable... {percent * 2}%");
+                }
+            }
+            
+            Logger.Info("VCRedist", "Download complete, running installer...");
+            progressCallback(50, "Installing Visual C++ Redistributable...");
+            
+            // Run the installer silently
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = "/install /quiet /norestart",
+                UseShellExecute = true,
+                Verb = "runas" // Request elevation
+            };
+            
+            using var process = Process.Start(startInfo);
+            if (process != null)
+            {
+                await process.WaitForExitAsync();
+                
+                if (process.ExitCode == 0 || process.ExitCode == 1638) // 1638 = already installed
+                {
+                    Logger.Success("VCRedist", "VC++ Redistributable installed successfully");
+                    progressCallback(100, "VC++ Redistributable installed");
+                }
+                else if (process.ExitCode == 3010) // Restart required
+                {
+                    Logger.Success("VCRedist", "VC++ Redistributable installed (restart may be required)");
+                    progressCallback(100, "VC++ Redistributable installed");
+                }
+                else
+                {
+                    Logger.Warning("VCRedist", $"VC++ installer exited with code: {process.ExitCode}");
+                    progressCallback(100, "VC++ installation completed");
+                }
+            }
+            
+            // Clean up installer
+            try { File.Delete(installerPath); } catch { }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("VCRedist", $"Failed to install VC++ Redistributable: {ex.Message}");
+            // Don't fail the game launch - the game might work anyway
+            progressCallback(100, "VC++ installation skipped");
+        }
+    }
     
     private async Task EnsureJREInstalledAsync(Action<int, string> progressCallback)
     {
@@ -4269,7 +4458,8 @@ exec env \
             var isBetaChannel = launcherBranch == "beta";
             
             // Get all releases (not just latest) to support beta channel
-            var apiUrl = "https://api.github.com/repos/yyyumeniku/HyPrism/releases?per_page=50";
+            // TESTING: Using TEST repo instead of HyPrism
+            var apiUrl = "https://api.github.com/repos/yyyumeniku/TEST/releases?per_page=50";
             var json = await HttpClient.GetStringAsync(apiUrl);
             using var doc = JsonDocument.Parse(json);
 
@@ -4566,12 +4756,14 @@ exec env \
     // Update - download latest launcher per platform instead of in-place update
     public async Task<bool> UpdateAsync(JsonElement[]? args)
     {
-        const string releasesPage = "https://github.com/yyyumeniku/HyPrism/releases/latest";
+        // TESTING: Using TEST repo instead of HyPrism
+        const string releasesPage = "https://github.com/yyyumeniku/TEST/releases/latest";
 
         try
         {
             // Fetch latest release assets
-            var apiUrl = "https://api.github.com/repos/yyyumeniku/HyPrism/releases/latest";
+            // TESTING: Using TEST repo instead of HyPrism
+            var apiUrl = "https://api.github.com/repos/yyyumeniku/TEST/releases/latest";
             var json = await HttpClient.GetStringAsync(apiUrl);
             using var doc = JsonDocument.Parse(json);
             var assets = doc.RootElement.GetProperty("assets");

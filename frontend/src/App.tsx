@@ -82,7 +82,7 @@ const parseDateMs = (dateValue: string | number | Date | undefined): number => {
 
 const fetchLauncherReleases = async () => {
   try {
-    const res = await fetch('https://api.github.com/repos/yyyumeniku/HyPrism/releases?per_page=100');
+    const res = await fetch('https://api.github.com/repos/yyyumeniku/TEST/releases?per_page=100');
     if (!res.ok) return [] as Array<{ item: any; dateMs: number }>;
     const data = await res.json();
     return (Array.isArray(data) ? data : []).map((r: any) => {
@@ -93,7 +93,7 @@ const fetchLauncherReleases = async () => {
         item: {
           title: `Hyprism ${cleaned || 'Release'} release`,
           excerpt: `Hyprism ${cleaned || 'Release'} release — click to see changelog.`,
-          url: r?.html_url || 'https://github.com/yyyumeniku/HyPrism/releases',
+          url: r?.html_url || 'https://github.com/yyyumeniku/TEST/releases',
           date: new Date(dateMs || Date.now()).toLocaleDateString(),
           author: 'HyPrism',
           imageUrl: appIcon,
