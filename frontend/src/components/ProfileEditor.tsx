@@ -12,28 +12,27 @@ interface ProfileEditorProps {
     onProfileUpdate?: () => void;
 }
 
-// Generate random usernames
+// Generate random usernames - ensures max 16 characters
 const generateRandomName = () => {
+    // Short adjectives (max 5 chars) + short nouns (max 6 chars) + 4-digit number = max 15 chars
     const adjectives = [
-        'Happy', 'Cosmic', 'Swift', 'Brave', 'Noble', 'Clever', 'Mighty', 'Silent', 
-        'Golden', 'Crystal', 'Shadow', 'Storm', 'Frozen', 'Ancient', 'Mystic', 'Wild',
-        'Radiant', 'Fierce', 'Gentle', 'Bold', 'Lucky', 'Sneaky', 'Epic', 'Legendary',
-        'Daring', 'Jolly', 'Cunning', 'Serene', 'Blazing', 'Lunar', 'Solar', 'Stellar',
-        'Crimson', 'Azure', 'Emerald', 'Obsidian', 'Primal', 'Royal', 'Valiant', 'Zealous',
-        'Frosty', 'Wicked', 'Humble', 'Glorious', 'Hyper', 'Ultra', 'Mega', 'Super'
+        'Happy', 'Swift', 'Brave', 'Noble', 'Quiet', 'Bold', 'Lucky', 'Epic',
+        'Jolly', 'Lunar', 'Solar', 'Azure', 'Royal', 'Foxy', 'Wacky', 'Zesty',
+        'Fizzy', 'Dizzy', 'Funky', 'Jazzy', 'Snowy', 'Rainy', 'Sunny', 'Windy',
+        'Fiery', 'Icy', 'Misty', 'Dusty', 'Rusty', 'Shiny', 'Silky', 'Fuzzy'
     ];
     const nouns = [
-        'Panda', 'Tiger', 'Wolf', 'Phoenix', 'Dragon', 'Knight', 'Ranger', 'Mage',
-        'Hunter', 'Guardian', 'Warrior', 'Sage', 'Fox', 'Bear', 'Eagle', 'Hawk',
-        'Lion', 'Panther', 'Falcon', 'Raven', 'Owl', 'Shark', 'Cobra', 'Viper',
-        'Lynx', 'Badger', 'Otter', 'Moose', 'Bison', 'Mantis', 'Scorpion', 'Spider',
-        'Pirate', 'Ninja', 'Samurai', 'Viking', 'Wizard', 'Sorcerer', 'Alchemist', 'Paladin',
-        'Astronaut', 'Voyager', 'Pioneer', 'Explorer', 'Captain', 'Admiral', 'Champion', 'Legend'
+        'Panda', 'Tiger', 'Wolf', 'Dragon', 'Knight', 'Ranger', 'Mage', 'Fox',
+        'Bear', 'Eagle', 'Hawk', 'Lion', 'Falcon', 'Raven', 'Owl', 'Shark',
+        'Cobra', 'Viper', 'Lynx', 'Badger', 'Otter', 'Mantis', 'Pirate', 'Ninja',
+        'Viking', 'Wizard', 'Scout', 'Hero', 'Ace', 'Star', 'King', 'Queen'
     ];
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
-    const num = Math.floor(Math.random() * 9000) + 1000; // 4-digit number like Xbox
-    return `${adj}${noun}${num}`;
+    const num = Math.floor(Math.random() * 9000) + 1000; // 4-digit number
+    const name = `${adj}${noun}${num}`;
+    // Safety check - truncate to 16 if somehow still too long
+    return name.length <= 16 ? name : name.substring(0, 16);
 };
 
 export const ProfileEditor: React.FC<ProfileEditorProps> = ({ isOpen, onClose, onProfileUpdate }) => {

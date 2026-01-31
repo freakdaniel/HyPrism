@@ -543,12 +543,14 @@ const App: React.FC = () => {
   };
 
   const handlePlay = async () => {
-    if (!username.trim() || username.length > 16) {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || trimmedUsername.length < 1 || trimmedUsername.length > 16) {
       setError({
         type: 'VALIDATION',
         message: t('Invalid Nickname'),
         technical: t('Nickname must be between 1 and 16 characters'),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        launcherVersion: launcherVersion
       });
       return;
     }
@@ -857,7 +859,7 @@ const App: React.FC = () => {
 
         {error && (
           <ErrorModal
-            error={error}
+            error={{...error, launcherVersion: launcherVersion}}
             onClose={() => setError(null)}
           />
         )}
@@ -870,7 +872,8 @@ const App: React.FC = () => {
               technical: launchTimeoutError.logs.length > 0 
                 ? launchTimeoutError.logs.join('\n')
                 : 'No log entries available',
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              launcherVersion: launcherVersion
             }}
             onClose={() => setLaunchTimeoutError(null)}
           />

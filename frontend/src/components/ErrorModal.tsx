@@ -10,6 +10,7 @@ interface ErrorModalProps {
     message: string;
     technical?: string;
     timestamp?: string;
+    launcherVersion?: string;
   };
   onClose: () => void;
 }
@@ -19,7 +20,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
   const [copied, setCopied] = React.useState(false);
 
   const copyError = () => {
-    const errorText = `Error Type: ${error.type}\nMessage: ${error.message}\nTechnical: ${error.technical || 'N/A'}\nTimestamp: ${error.timestamp || new Date().toISOString()}`;
+    const errorText = `Error Type: ${error.type}\nMessage: ${error.message}\nTechnical: ${error.technical || 'N/A'}\nTimestamp: ${error.timestamp || new Date().toISOString()}\nLauncher Version: ${error.launcherVersion || 'Unknown'}`;
     navigator.clipboard.writeText(errorText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -36,6 +37,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
 - **Message:** ${error.message}
 - **Technical:** ${error.technical || 'N/A'}
 - **Timestamp:** ${error.timestamp || new Date().toISOString()}
+- **Launcher Version:** ${error.launcherVersion || 'Unknown'}
 
 ## System Info
 - **Platform:** ${navigator.platform}
@@ -114,11 +116,18 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
             )}
           </div>
 
-          {error.timestamp && (
-            <p className="text-xs text-gray-500">
-              {t('Occurred at:')} {new Date(error.timestamp).toLocaleString()}
-            </p>
-          )}
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            {error.timestamp && (
+              <p>
+                {t('Occurred at:')} {new Date(error.timestamp).toLocaleString()}
+              </p>
+            )}
+            {error.launcherVersion && (
+              <p className="text-gray-600">
+                v{error.launcherVersion}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
