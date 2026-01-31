@@ -958,7 +958,7 @@ export const ModManager: React.FC<ModManagerProps> = ({
         
         {/* Success/info message */}
         {importProgress && !isImporting && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-xl text-white text-sm" style={{ backgroundColor: accentColor }}>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-xl text-sm" style={{ backgroundColor: accentColor, color: accentTextColor }}>
             {importProgress}
           </div>
         )}

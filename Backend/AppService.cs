@@ -6113,23 +6113,27 @@ rm -f ""$0""
             }
         }
         
-        // Scan for actual JAR files in the mods folder
-        var jarFiles = Directory.GetFiles(modsPath, "*.jar", SearchOption.TopDirectoryOnly);
+        // Scan for mod files in the mods folder (supports .jar, .zip, .hmod, .litemod, .disabled)
+        var modExtensions = new[] { "*.jar", "*.zip", "*.hmod", "*.litemod", "*.disabled" };
+        var modFiles = modExtensions
+            .SelectMany(ext => Directory.GetFiles(modsPath, ext, SearchOption.TopDirectoryOnly))
+            .Distinct()
+            .ToArray();
         var foundMods = new List<InstalledMod>();
         var needsManifestUpdate = false;
         
-        foreach (var jarPath in jarFiles)
+        foreach (var modPath in modFiles)
         {
-            var fileName = Path.GetFileName(jarPath);
+            var fileName = Path.GetFileName(modPath);
             
-            // Check if this JAR is already in manifest
+            // Check if this mod file is already in manifest
             if (manifestMods.TryGetValue(fileName, out var existingMod))
             {
                 foundMods.Add(existingMod);
             }
             else
             {
-                // JAR exists but not in manifest - add it as a local mod
+                // Mod file exists but not in manifest - add it as a local mod
                 Logger.Info("Mods", $"Found untracked mod: {fileName}");
                 var localMod = new InstalledMod
                 {
