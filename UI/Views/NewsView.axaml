@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
+             mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="700"
+             x:Class="HyPrism.UI.Views.NewsView">
+    
+    <Grid Width="380" 
+          VerticalAlignment="Stretch"
+          RowDefinitions="Auto, *">
+        
+        <!-- News Header -->
+        <Grid Grid.Row="0" 
+              Margin="0,0,0,16"
+              ColumnDefinitions="Auto, *, Auto">
+            <StackPanel Grid.Column="0" 
+                        Orientation="Horizontal" 
+                        Spacing="10">
+                <svg:Svg Path="/Assets/Icons/newspaper.svg" 
+                         Width="20" 
+                         Height="20"
+                         VerticalAlignment="Center"/>
+                <TextBlock Text="News" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Foreground="White" 
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+            
+            <!-- News Filter Tabs -->
+            <StackPanel Grid.Column="2" 
+                            Orientation="Horizontal" 
+                            Spacing="8">
+                    <ToggleButton Content="All" 
+                                  IsChecked="True"
+                                  Background="{DynamicResource HytaleOrangeBrush}"
+                                  Foreground="#111"
+                                  Padding="12,6"
+                                  CornerRadius="8"
+                                  FontSize="11"
+                                  FontWeight="Bold"/>
+                    <ToggleButton Content="Hytale" 
+                                  Background="#2A2A2A"
+                                  Foreground="#999"
+                                  Padding="12,6"
+                                  CornerRadius="8"
+                                  FontSize="11"/>
+                    <ToggleButton Content="HyPrism" 
+                                  Background="#2A2A2A"
+                                  Foreground="#999"
+                                  Padding="12,6"
+                                  CornerRadius="8"
+                                  FontSize="11"/>
+            </StackPanel>
+        </Grid>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden">
+                <ItemsControl ItemsSource="{Binding News}" 
+                              Margin="0,0,0,20">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding $parent[Window].DataContext.OpenNewsLinkCommand}"
+                                    CommandParameter="{Binding Url}"
+                                    Background="Transparent"
+                                    Padding="0"
+                                    Margin="0,0,0,16"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    CornerRadius="16">
+                                <Border Background="#CC252525" 
+                                        CornerRadius="12" 
+                                        Padding="16"
+                                        BorderBrush="#333333"
+                                        BorderThickness="1">
+                                    <Border.Transitions>
+                                        <Transitions>
+                                            <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                                            <BrushTransition Property="BorderBrush" Duration="0:0:0.2"/>
+                                        </Transitions>
+                                    </Border.Transitions>
+                                    <Border.Styles>
+                                        <Style Selector="Border:pointerover">
+                                            <Setter Property="Background" Value="#CC2D2D2D"/>
+                                            <Setter Property="BorderBrush" Value="#444444"/>
+                                        </Style>
+                                    </Border.Styles>
+                                    
+                                    <StackPanel Spacing="8">
+                                        <!-- Title -->
+                                        <TextBlock Text="{Binding Title}" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="White" 
+                                                   FontSize="14"
+                                                   TextWrapping="Wrap"
+                                                       MaxLines="2"
+                                                       LineHeight="20"/>
+                                            
+                                            <!-- Excerpt -->
+                                            <TextBlock Text="{Binding Excerpt}" 
+                                                       FontSize="12" 
+                                                       Foreground="#AAAAAA"
+                                                       TextWrapping="Wrap"
+                                                       MaxLines="2"
+                                                       LineHeight="17"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            
+                                            <!-- Meta Info -->
+                                            <Grid ColumnDefinitions="Auto, *" Margin="0,4,0,0">
+                                                <StackPanel Grid.Column="0" 
+                                                            Orientation="Horizontal" 
+                                                            Spacing="6">
+                                                    <TextBlock Text="•" 
+                                                               FontSize="10" 
+                                                               Foreground="#888"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Author}" 
+                                                               FontSize="11" 
+                                                               Foreground="#999"
+                                                               FontWeight="Medium"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" 
+                                                           Text="{Binding Date}" 
+                                                           FontSize="11" 
+                                                           Foreground="#777"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

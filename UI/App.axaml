@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
+             xmlns:converters="using:HyPrism.UI.Converters"
              x:Class="HyPrism.UI.App"
              RequestedThemeVariant="Dark">
     <Application.Resources>
@@ -14,6 +15,9 @@
             <SolidColorBrush x:Key="HytaleOrangeDarkBrush" Color="{StaticResource HytaleOrangeDark}"/>
             <SolidColorBrush x:Key="HytaleDarkBrush" Color="{StaticResource HytaleDark}"/>
             <SolidColorBrush x:Key="HytaleDarkLightBrush" Color="{StaticResource HytaleDarkLight}"/>
+            
+            <!-- Converters -->
+            <converters:ProgressToWidthConverter x:Key="ProgressToWidthConverter"/>
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>

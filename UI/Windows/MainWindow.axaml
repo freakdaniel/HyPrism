@@ -149,128 +149,16 @@
                     </StackPanel>
                 </StackPanel>
                 
-                <!-- RIGHT PANEL: News -->
-                <Border VerticalAlignment="Stretch" 
-                        HorizontalAlignment="Right"
-                        Width="350" 
-                        Margin="0,120,0,80"
-                        Background="#CC111111" 
-                        CornerRadius="12" 
-                        BorderBrush="#33FFFFFF" 
-                        BorderThickness="1"
-                        IsVisible="{Binding !AppService.Configuration.DisableNews}">
-                    <Grid RowDefinitions="Auto, *">
-                        <!-- News Header -->
-                        <Border Grid.Row="0" 
-                                Background="#1a1a1a" 
-                                CornerRadius="12,12,0,0" 
-                                Padding="16">
-                            <Grid ColumnDefinitions="Auto, *, Auto, Auto">
-                                <svg:Svg Path="/Assets/Icons/info.svg" 
-                                         Width="18" 
-                                         Height="18"
-                                         VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" 
-                                           Text="News" 
-                                           FontSize="15" 
-                                           FontWeight="SemiBold" 
-                                           Foreground="White" 
-                                           VerticalAlignment="Center"
-                                           Margin="8,0,0,0"/>
+                <!-- RIGHT PANEL: News (UserControl) -->
+                <views:NewsView VerticalAlignment="Stretch" 
+                                HorizontalAlignment="Right"
+                                Margin="0,140,0,80"
+                                IsVisible="{Binding !AppService.Configuration.DisableNews}"/>                
+                <!-- BOTTOM LEFT: Music Player (Temporarily disabled) -->
+                <!-- <views:MusicPlayerView VerticalAlignment="Bottom"
+                                       HorizontalAlignment="Left"
+                                       Margin="30,0,0,30"/> -->
                                 
-                                <!-- News Filter Tabs -->
-                                <StackPanel Grid.Column="2" 
-                                            Orientation="Horizontal" 
-                                            Spacing="6"
-                                            Margin="10,0">
-                                    <Button Content="All" 
-                                            Background="{StaticResource HytaleOrangeBrush}"
-                                            Foreground="#111"
-                                            Padding="8,4"
-                                            CornerRadius="4"
-                                            FontSize="11"
-                                            FontWeight="SemiBold"/>
-                                    <Button Content="Hytale" 
-                                            Background="Transparent"
-                                            Foreground="#999"
-                                            Padding="8,4"
-                                            CornerRadius="4"
-                                            FontSize="11"/>
-                                    <Button Content="HyPrism" 
-                                            Background="Transparent"
-                                            Foreground="#999"
-                                            Padding="8,4"
-                                            CornerRadius="4"
-                                            FontSize="11"/>
-                                </StackPanel>
-                                
-                                <!-- Scroll Up Button -->
-                                <Button Grid.Column="3" 
-                                        Background="Transparent" 
-                                        Padding="6" 
-                                        CornerRadius="6">
-                                    <svg:Svg Path="/Assets/Icons/chevron-up.svg" Width="16" Height="16"/>
-                                </Button>
-                            </Grid>
-                        </Border>
-                        
-                        <!-- News List -->
-                        <ScrollViewer Grid.Row="1">
-                            <ItemsControl ItemsSource="{Binding News}" Margin="12">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Command="{Binding $parent[Window].DataContext.OpenNewsLinkCommand}"
-                                                CommandParameter="{Binding Url}"
-                                                Background="Transparent"
-                                                Padding="0"
-                                                Margin="0,0,0,10"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Stretch">
-                                            <Border Background="#252525" 
-                                                    CornerRadius="8" 
-                                                    Padding="12"
-                                                    BorderBrush="#333"
-                                                    BorderThickness="1">
-                                                <Border.Styles>
-                                                    <Style Selector="Border:pointerover">
-                                                        <Setter Property="Background" Value="#2a2a2a"/>
-                                                        <Setter Property="BorderBrush" Value="#444"/>
-                                                    </Style>
-                                                </Border.Styles>
-                                                <StackPanel Spacing="6">
-                                                    <TextBlock Text="{Binding Title}" 
-                                                               FontWeight="SemiBold" 
-                                                               Foreground="White" 
-                                                               FontSize="13"
-                                                               TextWrapping="Wrap"
-                                                               MaxLines="2"/>
-                                                    <TextBlock Text="{Binding Excerpt}" 
-                                                               FontSize="11" 
-                                                               Foreground="#999"
-                                                               TextWrapping="Wrap"
-                                                               MaxLines="3"
-                                                               TextTrimming="CharacterEllipsis"/>
-                                                    <Grid ColumnDefinitions="Auto, *">
-                                                        <TextBlock Grid.Column="0" 
-                                                                   Text="{Binding Author}" 
-                                                                   FontSize="10" 
-                                                                   Foreground="#666"/>
-                                                        <TextBlock Grid.Column="1" 
-                                                                   Text="{Binding Date}" 
-                                                                   FontSize="10" 
-                                                                   Foreground="#666"
-                                                                   HorizontalAlignment="Right"/>
-                                                    </Grid>
-                                                </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Grid>
-                </Border>
-                
                 <!-- BOTTOM LEFT: Action Buttons -->
                 <StackPanel VerticalAlignment="Bottom" 
                             HorizontalAlignment="Left"
@@ -315,7 +203,7 @@
                 <TextBlock VerticalAlignment="Bottom" 
                            HorizontalAlignment="Center"
                            Margin="0,0,0,8">
-                    <Run Text="Use with educational purposes only. Like it? " Foreground="#999" FontSize="12"/>
+                    <Run Text="For educational purposes only. Like it? " Foreground="#999" FontSize="12"/>
                     <Run Text="BUY IT" Foreground="{StaticResource HytaleOrangeBrush}" FontSize="12" FontWeight="Bold"/>
                 </TextBlock>
                 
@@ -385,6 +273,12 @@
                 <views:ProfileEditorView DataContext="{Binding ProfileEditorViewModel}" Width="700" Height="600" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             </Grid>
         </Grid>
+        
+        <!-- Update/Download Progress Overlay -->
+        <views:UpdateOverlayView/>
+
+        <!-- Error Modal -->
+        <views:ErrorModalView/>
     </Grid>
     
 </Window>

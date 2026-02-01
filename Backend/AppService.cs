@@ -2016,4 +2016,13 @@ exec env \
     /// Gets the list of available game languages that have translation files.
     /// </summary>
     public List<string> GetAvailableGameLanguages() => _languageService.GetAvailableGameLanguages();
+    
+    /// <summary>
+    /// Gets the current music enabled state from configuration.
+    /// </summary>
+    public async Task<bool> GetMusicEnabledAsync()
+    {
+        await Task.CompletedTask;
+        return _settingsService.GetMusicEnabled();
+    }
 }

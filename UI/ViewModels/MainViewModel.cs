@@ -58,6 +58,20 @@ public class MainViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _downloadSpeedText, value);
     }
     
+    private string _progressIconPath = "/Assets/Icons/download-cloud.svg";
+    public string ProgressIconPath
+    {
+        get => _progressIconPath;
+        set => this.RaiseAndSetIfChanged(ref _progressIconPath, value);
+    }
+    
+    private double _overlayOpacity = 1.0;
+    public double OverlayOpacity
+    {
+        get => _overlayOpacity;
+        set => this.RaiseAndSetIfChanged(ref _overlayOpacity, value);
+    }
+    
     // Versioning
     private string _selectedBranch = "Release";
     public string SelectedBranch
@@ -119,6 +133,35 @@ public class MainViewModel : ReactiveObject
         get => _profileEditorViewModel;
         set => this.RaiseAndSetIfChanged(ref _profileEditorViewModel, value);
     }
+    
+    // Error Modal
+    private bool _isErrorModalOpen;
+    public bool IsErrorModalOpen
+    {
+        get => _isErrorModalOpen;
+        set => this.RaiseAndSetIfChanged(ref _isErrorModalOpen, value);
+    }
+    
+    private string _errorTitle = "";
+    public string ErrorTitle
+    {
+        get => _errorTitle;
+        set => this.RaiseAndSetIfChanged(ref _errorTitle, value);
+    }
+    
+    private string _errorMessage = "";
+    public string ErrorMessage
+    {
+        get => _errorMessage;
+        set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
+    }
+    
+    private string _errorTrace = "";
+    public string ErrorTrace
+    {
+        get => _errorTrace;
+        set => this.RaiseAndSetIfChanged(ref _errorTrace, value);
+    }
 
     public ObservableCollection<string> Branches { get; } = new() { "Release", "Pre-Release" };
     
@@ -140,6 +183,9 @@ public class MainViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> ToggleProfileEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshNewsCommand { get; }
     public ReactiveCommand<string, Unit> OpenNewsLinkCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseErrorModalCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyErrorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleMusicCommand { get; }
     
     public MainViewModel()
     {
@@ -151,7 +197,8 @@ public class MainViewModel : ReactiveObject
                 x => x.IsSettingsOpen, 
                 x => x.IsModsOpen, 
                 x => x.IsProfileEditorOpen,
-                (s, m, p) => s || m || p)
+                x => x.IsErrorModalOpen,
+                (s, m, p, e) => s || m || p || e)
             .ToProperty(this, x => x.IsOverlayOpen);
         
         // Initialize child VMs
@@ -230,8 +277,22 @@ public class MainViewModel : ReactiveObject
             }
         });
         
-        // Load initial news
+        CloseErrorModalCommand = ReactiveCommand.Create(() => 
+        {
+            IsErrorModalOpen = false;
+        });
+        CopyErrorCommand = ReactiveCommand.Create(() =>
+        {
+            var errorText = $"Error: {ErrorTitle}\nMessage: {ErrorMessage}\nTrace:\n{ErrorTrace}";
+            // TODO: Copy to clipboard (Avalonia clipboard API)
+            return Unit.Default;
+        });
+        
+        ToggleMusicCommand = ReactiveCommand.Create(ToggleMusic);
+        
+        // Load initial news and music state
         _ = LoadNewsAsync();
+        _ = LoadMusicStateAsync();
         
         // Event subscriptions need to be marshaled to UI thread
         AppService.DownloadProgressChanged += (state, progress, speed, dl, total) => 
@@ -244,25 +305,81 @@ public class MainViewModel : ReactiveObject
             Dispatcher.UIThread.Post(() => OnError(title, msg, trace));
     }
 
-    private void OnDownloadProgress(string state, double progress, string speed, long downloaded, long total)
+    private async void OnDownloadProgress(string state, double progress, string speed, long downloaded, long total)
     {
         IsDownloading = true;
-        ProgressValue = progress * 100;
+        ProgressValue = progress; // Already in 0-100 range
+        
+        // Reset opacity when showing overlay
+        if (OverlayOpacity < 1.0)
+            OverlayOpacity = 1.0;
+        
+        // Change icon based on state
+        var stateLower = state.ToLower();
+        
+        // Handle "complete" state - show success message and hide overlay
+        if (stateLower == "complete")
+        {
+            ProgressIconPath = "/Assets/Icons/smile.svg";
+            ProgressText = "Launched!";
+            ProgressValue = 100;
+            DownloadSpeedText = "";
+            
+            // Wait 4 seconds
+            await Task.Delay(4000);
+            
+            // Fade out
+            OverlayOpacity = 0;
+            await Task.Delay(500); // Wait for fade animation
+            
+            // Hide overlay
+            IsDownloading = false;
+            ProgressValue = 0;
+            return;
+        }
+        
+        // Normal state handling
         ProgressText = state;
         DownloadSpeedText = speed;
+        
+        if (stateLower.Contains("download") || stateLower.Contains("загрузк"))
+            ProgressIconPath = "/Assets/Icons/download-cloud.svg";
+        else if (stateLower.Contains("patch") || stateLower.Contains("патч") || stateLower.Contains("extract") || stateLower.Contains("распак"))
+            ProgressIconPath = "/Assets/Icons/wrench.svg";
+        else if (stateLower.Contains("launch") || stateLower.Contains("запуск") || stateLower.Contains("start"))
+            ProgressIconPath = "/Assets/Icons/rocket.svg";
     }
 
-    private void OnGameStateChanged(string state, int code)
+    private async void OnGameStateChanged(string state, int code)
     {
         // Adjust logic based on actual AppService notification codes
         // Assuming code > 0 is running state or similar
-        ProgressText = state;
-        IsGameRunning = state.ToLower().Contains("running") || state.ToLower().Contains("playing");
+        var stateLower = state.ToLower();
+        IsGameRunning = stateLower.Contains("running") || stateLower.Contains("playing");
         
-        if (!IsGameRunning && !IsDownloading)
+        if (IsGameRunning)
         {
-             ProgressValue = 0;
-             DownloadSpeedText = "";
+            // Show success animation before hiding
+            ProgressIconPath = "/Assets/Icons/smile.svg";
+            ProgressText = "Launched!";
+            ProgressValue = 100;
+            DownloadSpeedText = "";
+            
+            // Wait 4 seconds
+            await Task.Delay(4000);
+            
+            // Fade out
+            OverlayOpacity = 0;
+            await Task.Delay(500); // Wait for fade animation
+            
+            // Hide overlay
+            IsDownloading = false;
+            ProgressValue = 0;
+        }
+        else if (!IsDownloading)
+        {
+            ProgressValue = 0;
+            DownloadSpeedText = "";
         }
     }
 
@@ -270,6 +387,12 @@ public class MainViewModel : ReactiveObject
     {
          ProgressText = $"Error: {message}";
          IsDownloading = false;
+         
+         // Show error modal
+         ErrorTitle = title;
+         ErrorMessage = message;
+         ErrorTrace = trace ?? "";
+         IsErrorModalOpen = true;
     }
 
     private async Task LaunchAsync()
@@ -332,5 +455,50 @@ public class MainViewModel : ReactiveObject
         {
             IsLoadingNews = false;
         }
+    }
+    
+    // Music Player
+    private bool _isMusicEnabled;
+    public bool IsMusicEnabled
+    {
+        get => _isMusicEnabled;
+        set => this.RaiseAndSetIfChanged(ref _isMusicEnabled, value);
+    }
+    
+    private double _volumeScale = 1.0;
+    public double VolumeScale
+    {
+        get => _volumeScale;
+        set => this.RaiseAndSetIfChanged(ref _volumeScale, value);
+    }
+    
+    public string MusicTooltip => IsMusicEnabled ? "Music: ON" : "Music: OFF";
+    
+    private void ToggleMusic()
+    {
+        IsMusicEnabled = !IsMusicEnabled;
+        AppService.SetMusicEnabled(IsMusicEnabled);
+        
+        // Animate volume icon
+        if (IsMusicEnabled)
+        {
+            Task.Run(async () =>
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    Dispatcher.UIThread.Post(() => VolumeScale = 1.2);
+                    await Task.Delay(150);
+                    Dispatcher.UIThread.Post(() => VolumeScale = 1.0);
+                    await Task.Delay(150);
+                }
+            });
+        }
+        
+        this.RaisePropertyChanged(nameof(MusicTooltip));
+    }
+    
+    private async Task LoadMusicStateAsync()
+    {
+        IsMusicEnabled = await AppService.GetMusicEnabledAsync();
     }
 }
