@@ -28,6 +28,13 @@ public class AppService : IDisposable
     private bool _disposed;
     private PhotinoWindow? _mainWindow;
     
+    // Skin protection: Watch for skin file overwrites during gameplay
+    private FileSystemWatcher? _skinWatcher;
+    private string? _protectedSkinPath;
+    private string? _protectedSkinContent;
+    private bool _skinProtectionEnabled;
+    private readonly object _skinProtectionLock = new object();
+    
     // Lock for mod manifest operations to prevent concurrent writes
     private static readonly SemaphoreSlim _modManifestLock = new(1, 1);
     
@@ -65,6 +72,10 @@ public class AppService : IDisposable
             SaveConfig();
             Logger.Info("Config", $"Updated placeholder username to: {_config.Nick}");
         }
+        
+        // IMPORTANT: Attempt to recover orphaned skin data after config is loaded.
+        // This handles the case where config was reset but old skin files still exist.
+        TryRecoverOrphanedSkinOnStartup();
         
         MigrateLegacyData();
         _butlerService = new ButlerService(_appDir);
@@ -108,6 +119,7 @@ public class AppService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        StopSkinProtection();
         _discordService?.Dispose();
     }
     
@@ -1034,8 +1046,25 @@ public class AppService : IDisposable
                 {
                     config.UUID = Guid.NewGuid().ToString();
                     config.Version = "2.0.0";
-                    SaveConfigInternal(config);
                     Logger.Info("Config", $"Migrated to v2.0.0, UUID: {config.UUID}");
+                }
+                
+                // Migration: Migrate existing UUID to UserUuids mapping
+                // This ensures existing users don't lose their skin when upgrading
+                config.UserUuids ??= new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(config.UUID) && !string.IsNullOrEmpty(config.Nick))
+                {
+                    // Check if current nick already has a UUID mapping
+                    var existingKey = config.UserUuids.Keys
+                        .FirstOrDefault(k => k.Equals(config.Nick, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (existingKey == null)
+                    {
+                        // No mapping exists for current nick - add the legacy UUID
+                        config.UserUuids[config.Nick] = config.UUID;
+                        Logger.Info("Config", $"Migrated existing UUID to UserUuids mapping for '{config.Nick}'");
+                        SaveConfigInternal(config);
+                    }
                 }
                 
                 return config;
@@ -1061,6 +1090,13 @@ public class AppService : IDisposable
         {
             config.Nick = GenerateRandomUsername();
         }
+        
+        // Initialize UserUuids and add current user
+        config.UserUuids ??= new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(config.Nick) && !string.IsNullOrEmpty(config.UUID))
+        {
+            config.UserUuids[config.Nick] = config.UUID;
+        }
 
         // Migrate legacy "latest" branch to release
         if (config.VersionType == "latest")
@@ -1080,6 +1116,116 @@ public class AppService : IDisposable
     private void SaveConfig()
     {
         SaveConfigInternal(_config);
+    }
+    
+    /// <summary>
+    /// Attempts to recover orphaned skin data on startup.
+    /// This handles the scenario where:
+    /// 1. User had skin saved with UUID A
+    /// 2. Config was reset/recreated with UUID B
+    /// 3. Old skin files still exist with UUID A
+    /// 
+    /// The method checks if:
+    /// - The current UUID has NO skin data
+    /// - There's an orphaned UUID with skin data
+    /// If so, it either:
+    /// - Adopts the orphaned UUID as the current user's UUID, OR
+    /// - Copies the skin data from orphaned UUID to current UUID
+    /// </summary>
+    private void TryRecoverOrphanedSkinOnStartup()
+    {
+        try
+        {
+            var currentUuid = _config.UUID;
+            if (string.IsNullOrEmpty(currentUuid) || string.IsNullOrEmpty(_config.Nick))
+            {
+                return;
+            }
+            
+            // Get the current instance's UserData path
+            var branch = NormalizeVersionType(_config.VersionType);
+            var versionPath = ResolveInstancePath(branch, 0, preferExisting: true);
+            var userDataPath = GetInstanceUserDataPath(versionPath);
+            var skinCacheDir = Path.Combine(userDataPath, "CachedPlayerSkins");
+            var avatarCacheDir = Path.Combine(userDataPath, "CachedAvatarPreviews");
+            
+            // Check if current UUID already has skin data
+            var currentSkinPath = Path.Combine(skinCacheDir, $"{currentUuid}.json");
+            if (File.Exists(currentSkinPath))
+            {
+                // Current UUID has skin - no recovery needed
+                return;
+            }
+            
+            // No skin for current UUID - look for orphaned skins
+            if (!Directory.Exists(skinCacheDir))
+            {
+                return;
+            }
+            
+            // Get all existing UUIDs from UserUuids mapping
+            var knownUuids = new HashSet<string>(
+                (_config.UserUuids?.Values ?? Enumerable.Empty<string>())
+                    .Concat(new[] { _config.UUID ?? "" })
+                    .Where(u => !string.IsNullOrEmpty(u)),
+                StringComparer.OrdinalIgnoreCase
+            );
+            
+            // Scan for orphaned skin files
+            var skinFiles = Directory.GetFiles(skinCacheDir, "*.json");
+            string? orphanedUuid = null;
+            DateTime latestTime = DateTime.MinValue;
+            
+            foreach (var file in skinFiles)
+            {
+                var fileName = Path.GetFileNameWithoutExtension(file);
+                if (Guid.TryParse(fileName, out var uuid))
+                {
+                    var uuidStr = uuid.ToString();
+                    if (!knownUuids.Contains(uuidStr))
+                    {
+                        // This is an orphaned skin
+                        var modTime = File.GetLastWriteTime(file);
+                        if (modTime > latestTime)
+                        {
+                            latestTime = modTime;
+                            orphanedUuid = uuidStr;
+                        }
+                    }
+                }
+            }
+            
+            if (orphanedUuid == null)
+            {
+                return; // No orphans found
+            }
+            
+            Logger.Info("Startup", $"Found orphaned skin with UUID {orphanedUuid}");
+            Logger.Info("Startup", $"Current user '{_config.Nick}' has no skin - recovering orphaned skin");
+            
+            // Strategy: Update the current user's UUID to match the orphaned skin
+            // This is better than copying because it preserves the identity across server syncs
+            _config.UserUuids ??= new Dictionary<string, string>();
+            
+            // Remove old mapping for current nick (case-insensitive)
+            var existingKey = _config.UserUuids.Keys
+                .FirstOrDefault(k => k.Equals(_config.Nick, StringComparison.OrdinalIgnoreCase));
+            if (existingKey != null)
+            {
+                _config.UserUuids.Remove(existingKey);
+            }
+            
+            // Set current user to use orphaned UUID
+            _config.UserUuids[_config.Nick] = orphanedUuid;
+            _config.UUID = orphanedUuid;
+            SaveConfig();
+            
+            Logger.Success("Startup", $"Recovered orphaned skin! User '{_config.Nick}' now uses UUID {orphanedUuid}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("Startup", $"Failed to recover orphaned skins: {ex.Message}");
+        }
     }
     
     /// <summary>
@@ -1118,7 +1264,7 @@ public class AppService : IDisposable
 
     public string GetNick() => _config.Nick;
     
-    public string GetUUID() => _config.UUID;
+    public string GetUUID() => GetCurrentUuid();
     
     /// <summary>
     /// Gets the avatar preview image as base64 data URL for displaying in the launcher.
@@ -1126,7 +1272,7 @@ public class AppService : IDisposable
     /// </summary>
     public string? GetAvatarPreview()
     {
-        return GetAvatarPreviewForUUID(_config.UUID);
+        return GetAvatarPreviewForUUID(GetCurrentUuid());
     }
     
     /// <summary>
@@ -1225,7 +1371,7 @@ public class AppService : IDisposable
     {
         try
         {
-            var uuid = _config.UUID;
+            var uuid = GetCurrentUuid();
             if (string.IsNullOrWhiteSpace(uuid)) return false;
             
             // Clear persistent backup
@@ -1275,6 +1421,373 @@ public class AppService : IDisposable
         _config.Nick = trimmed;
         SaveConfig();
         return true;
+    }
+    
+    // ========== UUID Management (Username->UUID Mapping) ==========
+    
+    /// <summary>
+    /// Gets or creates a UUID for a specific username.
+    /// Uses case-insensitive lookup but preserves original username casing.
+    /// This ensures each username consistently gets the same UUID across sessions.
+    /// </summary>
+    public string GetUuidForUser(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return _config.UUID; // Fallback to legacy single UUID
+        }
+        
+        // Initialize UserUuids if null
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        // Case-insensitive lookup - find if any existing username matches
+        var existingKey = _config.UserUuids.Keys
+            .FirstOrDefault(k => k.Equals(username, StringComparison.OrdinalIgnoreCase));
+        
+        if (existingKey != null)
+        {
+            return _config.UserUuids[existingKey];
+        }
+        
+        // No existing UUID for this username - before creating a new one,
+        // check if there are orphaned skin files we should adopt.
+        // This handles the case where config was reset but skin data still exists.
+        var orphanedUuid = FindOrphanedSkinUuid();
+        if (!string.IsNullOrEmpty(orphanedUuid))
+        {
+            Logger.Info("UUID", $"Recovered orphaned skin UUID for user '{username}': {orphanedUuid}");
+            _config.UserUuids[username] = orphanedUuid;
+            _config.UUID = orphanedUuid;
+            SaveConfig();
+            return orphanedUuid;
+        }
+        
+        // No orphaned skins found - create a new UUID
+        var newUuid = Guid.NewGuid().ToString();
+        _config.UserUuids[username] = newUuid;
+        
+        // Also update the legacy UUID field for backwards compatibility
+        _config.UUID = newUuid;
+        
+        SaveConfig();
+        Logger.Info("UUID", $"Created new UUID for user '{username}': {newUuid}");
+        
+        return newUuid;
+    }
+    
+    /// <summary>
+    /// Finds an orphaned skin UUID from existing skin files in the game's UserData.
+    /// Returns the UUID if exactly one orphaned skin is found, null otherwise.
+    /// An "orphaned" skin is one whose UUID is not in the UserUuids mapping.
+    /// </summary>
+    private string? FindOrphanedSkinUuid()
+    {
+        try
+        {
+            // Get the current instance's UserData path
+            var branch = NormalizeVersionType(_config.VersionType);
+            var versionPath = ResolveInstancePath(branch, 0, preferExisting: true);
+            var userDataPath = GetInstanceUserDataPath(versionPath);
+            var skinCacheDir = Path.Combine(userDataPath, "CachedPlayerSkins");
+            
+            if (!Directory.Exists(skinCacheDir))
+            {
+                return null;
+            }
+            
+            // Get all existing UUIDs from UserUuids mapping
+            var knownUuids = new HashSet<string>(
+                (_config.UserUuids?.Values ?? Enumerable.Empty<string>())
+                    .Concat(new[] { _config.UUID ?? "" })
+                    .Where(u => !string.IsNullOrEmpty(u)),
+                StringComparer.OrdinalIgnoreCase
+            );
+            
+            // Scan skin files for orphaned UUIDs
+            var skinFiles = Directory.GetFiles(skinCacheDir, "*.json");
+            var orphanedUuids = new List<string>();
+            
+            foreach (var file in skinFiles)
+            {
+                var fileName = Path.GetFileNameWithoutExtension(file);
+                // Check if it looks like a UUID
+                if (Guid.TryParse(fileName, out var uuid))
+                {
+                    var uuidStr = uuid.ToString();
+                    // If this UUID is not in our known UUIDs, it's orphaned
+                    if (!knownUuids.Contains(uuidStr))
+                    {
+                        orphanedUuids.Add(uuidStr);
+                        Logger.Info("UUID", $"Found orphaned skin file: {fileName}.json");
+                    }
+                }
+            }
+            
+            // If exactly one orphaned UUID found, we can safely adopt it
+            // If multiple are found, we can't determine which is correct
+            if (orphanedUuids.Count == 1)
+            {
+                return orphanedUuids[0];
+            }
+            else if (orphanedUuids.Count > 1)
+            {
+                // Multiple orphans - pick the most recently modified one
+                string? mostRecent = null;
+                DateTime latestTime = DateTime.MinValue;
+                
+                foreach (var orphanUuid in orphanedUuids)
+                {
+                    var skinPath = Path.Combine(skinCacheDir, $"{orphanUuid}.json");
+                    if (File.Exists(skinPath))
+                    {
+                        var modTime = File.GetLastWriteTime(skinPath);
+                        if (modTime > latestTime)
+                        {
+                            latestTime = modTime;
+                            mostRecent = orphanUuid;
+                        }
+                    }
+                }
+                
+                if (mostRecent != null)
+                {
+                    Logger.Info("UUID", $"Multiple orphaned skins found, using most recent: {mostRecent}");
+                    return mostRecent;
+                }
+            }
+            
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("UUID", $"Error scanning for orphaned skins: {ex.Message}");
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Gets the UUID for the current user (based on Nick).
+    /// </summary>
+    public string GetCurrentUuid()
+    {
+        return GetUuidForUser(_config.Nick);
+    }
+    
+    /// <summary>
+    /// Gets all username->UUID mappings.
+    /// Returns a list of objects with username, uuid, and isCurrent properties.
+    /// </summary>
+    public List<UuidMapping> GetAllUuidMappings()
+    {
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        var currentNick = _config.Nick;
+        return _config.UserUuids.Select(kvp => new UuidMapping
+        {
+            Username = kvp.Key,
+            Uuid = kvp.Value,
+            IsCurrent = kvp.Key.Equals(currentNick, StringComparison.OrdinalIgnoreCase)
+        }).ToList();
+    }
+    
+    /// <summary>
+    /// Sets a custom UUID for a specific username.
+    /// </summary>
+    public bool SetUuidForUser(string username, string uuid)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return false;
+        if (string.IsNullOrWhiteSpace(uuid)) return false;
+        if (!Guid.TryParse(uuid.Trim(), out var parsed)) return false;
+        
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        // Remove any existing entry with same username (case-insensitive)
+        var existingKey = _config.UserUuids.Keys
+            .FirstOrDefault(k => k.Equals(username, StringComparison.OrdinalIgnoreCase));
+        if (existingKey != null)
+        {
+            _config.UserUuids.Remove(existingKey);
+        }
+        
+        _config.UserUuids[username] = parsed.ToString();
+        
+        // Update legacy UUID if this is the current user
+        if (username.Equals(_config.Nick, StringComparison.OrdinalIgnoreCase))
+        {
+            _config.UUID = parsed.ToString();
+        }
+        
+        SaveConfig();
+        Logger.Info("UUID", $"Set custom UUID for user '{username}': {parsed}");
+        return true;
+    }
+    
+    /// <summary>
+    /// Deletes the UUID mapping for a specific username.
+    /// Cannot delete the UUID for the current user.
+    /// </summary>
+    public bool DeleteUuidForUser(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return false;
+        
+        // Don't allow deleting current user's UUID
+        if (username.Equals(_config.Nick, StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Warning("UUID", $"Cannot delete UUID for current user '{username}'");
+            return false;
+        }
+        
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        var existingKey = _config.UserUuids.Keys
+            .FirstOrDefault(k => k.Equals(username, StringComparison.OrdinalIgnoreCase));
+        
+        if (existingKey != null)
+        {
+            _config.UserUuids.Remove(existingKey);
+            SaveConfig();
+            Logger.Info("UUID", $"Deleted UUID for user '{username}'");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// Generates a new random UUID for the current user.
+    /// Warning: This will change the player's identity and they will lose their skin!
+    /// </summary>
+    public string ResetCurrentUserUuid()
+    {
+        var newUuid = Guid.NewGuid().ToString();
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        // Remove old entry (case-insensitive)
+        var existingKey = _config.UserUuids.Keys
+            .FirstOrDefault(k => k.Equals(_config.Nick, StringComparison.OrdinalIgnoreCase));
+        if (existingKey != null)
+        {
+            _config.UserUuids.Remove(existingKey);
+        }
+        
+        _config.UserUuids[_config.Nick] = newUuid;
+        _config.UUID = newUuid;
+        
+        SaveConfig();
+        Logger.Info("UUID", $"Reset UUID for current user '{_config.Nick}': {newUuid}");
+        return newUuid;
+    }
+    
+    /// <summary>
+    /// Switches to an existing username (and its UUID).
+    /// Returns the UUID for the username.
+    /// </summary>
+    public string? SwitchToUsername(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return null;
+        
+        _config.UserUuids ??= new Dictionary<string, string>();
+        
+        // Find the username (case-insensitive)
+        var existingKey = _config.UserUuids.Keys
+            .FirstOrDefault(k => k.Equals(username, StringComparison.OrdinalIgnoreCase));
+        
+        if (existingKey != null)
+        {
+            // Switch to existing username with its UUID
+            _config.Nick = existingKey; // Use original casing
+            _config.UUID = _config.UserUuids[existingKey];
+            SaveConfig();
+            Logger.Info("UUID", $"Switched to existing user '{existingKey}' with UUID {_config.UUID}");
+            return _config.UUID;
+        }
+        
+        // Username doesn't exist in mappings - create new entry
+        var newUuid = Guid.NewGuid().ToString();
+        _config.Nick = username;
+        _config.UUID = newUuid;
+        _config.UserUuids[username] = newUuid;
+        SaveConfig();
+        Logger.Info("UUID", $"Created new user '{username}' with UUID {newUuid}");
+        return newUuid;
+    }
+    
+    /// <summary>
+    /// Attempts to recover orphaned skin data and associate it with the current user.
+    /// This is useful when a user's config was reset but their skin data still exists.
+    /// Returns true if skin data was recovered, false otherwise.
+    /// </summary>
+    public bool RecoverOrphanedSkinData()
+    {
+        try
+        {
+            var currentUuid = GetCurrentUuid();
+            var orphanedUuid = FindOrphanedSkinUuid();
+            
+            if (string.IsNullOrEmpty(orphanedUuid))
+            {
+                Logger.Info("UUID", "No orphaned skin data found to recover");
+                return false;
+            }
+            
+            // If the current UUID already has a skin, don't overwrite
+            var branch = NormalizeVersionType(_config.VersionType);
+            var versionPath = ResolveInstancePath(branch, 0, preferExisting: true);
+            var userDataPath = GetInstanceUserDataPath(versionPath);
+            var skinCacheDir = Path.Combine(userDataPath, "CachedPlayerSkins");
+            var avatarCacheDir = Path.Combine(userDataPath, "CachedAvatarPreviews");
+            
+            var currentSkinPath = Path.Combine(skinCacheDir, $"{currentUuid}.json");
+            
+            // If current user already has a skin, ask them to use "switch to orphan" instead
+            if (File.Exists(currentSkinPath))
+            {
+                Logger.Info("UUID", $"Current user already has skin data. Use SetUuidForUser to switch to the orphaned UUID: {orphanedUuid}");
+                return false;
+            }
+            
+            // Copy orphaned skin to current UUID
+            var orphanSkinPath = Path.Combine(skinCacheDir, $"{orphanedUuid}.json");
+            if (File.Exists(orphanSkinPath))
+            {
+                Directory.CreateDirectory(skinCacheDir);
+                File.Copy(orphanSkinPath, currentSkinPath, true);
+                Logger.Success("UUID", $"Copied orphaned skin from {orphanedUuid} to {currentUuid}");
+            }
+            
+            // Copy orphaned avatar to current UUID
+            var orphanAvatarPath = Path.Combine(avatarCacheDir, $"{orphanedUuid}.png");
+            var currentAvatarPath = Path.Combine(avatarCacheDir, $"{currentUuid}.png");
+            if (File.Exists(orphanAvatarPath))
+            {
+                Directory.CreateDirectory(avatarCacheDir);
+                File.Copy(orphanAvatarPath, currentAvatarPath, true);
+                Logger.Success("UUID", $"Copied orphaned avatar from {orphanedUuid} to {currentUuid}");
+            }
+            
+            // Also update the profile if one exists
+            var profile = _config.Profiles?.FirstOrDefault(p => p.UUID == currentUuid);
+            if (profile != null)
+            {
+                BackupProfileSkinData(currentUuid);
+            }
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("UUID", $"Failed to recover orphaned skin data: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Gets the UUID of any orphaned skin found in the game cache.
+    /// Returns null if no orphaned skins are found.
+    /// </summary>
+    public string? GetOrphanedSkinUuid()
+    {
+        return FindOrphanedSkinUuid();
     }
     
     // ========== Profile Management ==========
@@ -1429,7 +1942,7 @@ public class AppService : IDisposable
             }
             
             // First, backup current profile's skin data before switching
-            var currentUuid = _config.UUID;
+            var currentUuid = GetCurrentUuid();
             if (!string.IsNullOrWhiteSpace(currentUuid))
             {
                 BackupProfileSkinData(currentUuid);
@@ -1440,10 +1953,15 @@ public class AppService : IDisposable
             // Restore the new profile's skin data
             RestoreProfileSkinData(profile);
             
-            // Update current UUID and Nick
+            // Update current UUID and Nick - also update UserUuids mapping
             _config.UUID = profile.UUID;
             _config.Nick = profile.Name;
             _config.ActiveProfileIndex = index;
+            
+            // Ensure the profile's UUID is in the UserUuids mapping
+            _config.UserUuids ??= new Dictionary<string, string>();
+            _config.UserUuids[profile.Name] = profile.UUID;
+            
             SaveConfig();
             
             Logger.Success("Profile", $"Switched to profile '{profile.Name}'");
@@ -1876,12 +2394,134 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
     }
     
     /// <summary>
+    /// Starts monitoring the skin file for the given profile to prevent overwrites during gameplay.
+    /// If the game tries to overwrite the skin with data from the server, we restore it immediately.
+    /// </summary>
+    private void StartSkinProtection(Profile profile, string skinCachePath)
+    {
+        try
+        {
+            StopSkinProtection(); // Clean up any existing watcher
+            
+            if (!File.Exists(skinCachePath))
+            {
+                Logger.Warning("SkinProtection", $"Skin file doesn't exist, cannot protect: {skinCachePath}");
+                return;
+            }
+            
+            // Store the original skin content
+            lock (_skinProtectionLock)
+            {
+                _protectedSkinPath = skinCachePath;
+                _protectedSkinContent = File.ReadAllText(skinCachePath);
+                _skinProtectionEnabled = true;
+            }
+            
+            var directory = Path.GetDirectoryName(skinCachePath);
+            var filename = Path.GetFileName(skinCachePath);
+            
+            if (string.IsNullOrEmpty(directory))
+            {
+                Logger.Warning("SkinProtection", "Invalid skin path");
+                return;
+            }
+            
+            _skinWatcher = new FileSystemWatcher(directory, filename)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime,
+                EnableRaisingEvents = true
+            };
+            
+            _skinWatcher.Changed += OnSkinFileChanged;
+            _skinWatcher.Created += OnSkinFileChanged;
+            
+            Logger.Success("SkinProtection", $"Started protecting skin file for {profile.Name}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("SkinProtection", $"Failed to start skin protection: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Handles skin file changes - restores the protected content if it was overwritten.
+    /// </summary>
+    private void OnSkinFileChanged(object sender, FileSystemEventArgs e)
+    {
+        lock (_skinProtectionLock)
+        {
+            if (!_skinProtectionEnabled || string.IsNullOrEmpty(_protectedSkinPath) || string.IsNullOrEmpty(_protectedSkinContent))
+                return;
+            
+            try
+            {
+                // Small delay to let the file write complete
+                Thread.Sleep(100);
+                
+                // Read current content
+                var currentContent = File.ReadAllText(_protectedSkinPath);
+                
+                // Compare - if different, the game overwrote our skin
+                if (currentContent != _protectedSkinContent)
+                {
+                    Logger.Warning("SkinProtection", "Detected skin overwrite - restoring protected skin!");
+                    
+                    // Temporarily disable watcher to avoid triggering ourselves
+                    _skinProtectionEnabled = false;
+                    
+                    // Restore the protected content
+                    File.WriteAllText(_protectedSkinPath, _protectedSkinContent);
+                    
+                    // Re-enable protection
+                    _skinProtectionEnabled = true;
+                    
+                    Logger.Success("SkinProtection", "Skin restored successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning("SkinProtection", $"Failed to check/restore skin: {ex.Message}");
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Stops the skin file watcher.
+    /// </summary>
+    private void StopSkinProtection()
+    {
+        try
+        {
+            lock (_skinProtectionLock)
+            {
+                _skinProtectionEnabled = false;
+                _protectedSkinPath = null;
+                _protectedSkinContent = null;
+            }
+            
+            if (_skinWatcher != null)
+            {
+                _skinWatcher.EnableRaisingEvents = false;
+                _skinWatcher.Changed -= OnSkinFileChanged;
+                _skinWatcher.Created -= OnSkinFileChanged;
+                _skinWatcher.Dispose();
+                _skinWatcher = null;
+                Logger.Info("SkinProtection", "Stopped skin protection");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("SkinProtection", $"Failed to stop skin protection: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
     /// Saves the current UUID/Nick as a new profile.
     /// Returns the created profile.
     /// </summary>
     public Profile? SaveCurrentAsProfile()
     {
-        var uuid = _config.UUID;
+        var uuid = GetCurrentUuid();
         var name = _config.Nick;
         
         if (string.IsNullOrWhiteSpace(uuid) || string.IsNullOrWhiteSpace(name))
@@ -4148,25 +4788,10 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
         }
 
         // STEP 1: Determine UUID to use for this session
-        // This must happen BEFORE auth token fetching so we use the correct UUID
-        string baseUuid;
-        string sessionUuid; // The UUID to actually use for this game session
-        
-        if (string.IsNullOrWhiteSpace(_config.UUID))
-        {
-            baseUuid = GenerateOfflineUUID(_config.Nick);
-            _config.UUID = baseUuid;
-            SaveConfig();
-            Logger.Info("Config", $"Generated and saved UUID from nickname: {baseUuid}");
-        }
-        else
-        {
-            baseUuid = _config.UUID;
-        }
-        
-        // Always use the saved UUID to preserve player items/progress
-        sessionUuid = baseUuid;
-        Logger.Info("Game", $"Using saved UUID: {sessionUuid}");
+        // Use the username->UUID mapping to ensure consistent UUIDs across sessions
+        // This is the key fix for skin persistence - each username always gets the same UUID
+        string sessionUuid = GetUuidForUser(_config.Nick);
+        Logger.Info("Game", $"Using UUID for user '{_config.Nick}': {sessionUuid}");
 
         // STEP 2: Fetch auth token - only if OnlineMode is enabled
         // If user wants offline mode, skip token fetching entirely
@@ -4249,10 +4874,19 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
         // Restore current profile's skin data before launching the game
         // This ensures the player's custom skin is loaded from their profile
         var currentProfile = _config.Profiles?.FirstOrDefault(p => p.UUID == sessionUuid);
+        string? skinCachePath = null;
         if (currentProfile != null)
         {
             RestoreProfileSkinData(currentProfile);
             Logger.Info("Game", $"Restored skin data for profile '{currentProfile.Name}'");
+            
+            // Start skin protection - this watches the skin file and restores it if the game overwrites it
+            // The game may fetch skin data from the server on startup which could overwrite our local cache
+            skinCachePath = Path.Combine(userDataDir, "CachedPlayerSkins", $"{currentProfile.UUID}.json");
+            if (File.Exists(skinCachePath))
+            {
+                StartSkinProtection(currentProfile, skinCachePath);
+            }
         }
 
         Logger.Info("Game", $"Launching: {executable}");
@@ -4432,8 +5066,11 @@ exec env \
             Logger.Info("Game", $"Game process exited with code: {exitCode}");
             _gameProcess = null;
             
+            // Stop skin protection first - allow normal skin file operations now
+            StopSkinProtection();
+            
             // Backup current profile's skin data after game exits (save any changes made during gameplay)
-            BackupProfileSkinData(_config.UUID);
+            BackupProfileSkinData(GetCurrentUuid());
             
             // Set Discord presence back to Idle
             _discordService.SetPresence(DiscordService.PresenceState.Idle);
@@ -7760,6 +8397,12 @@ public class Config
     /// Whether the user has completed the initial onboarding flow.
     /// </summary>
     public bool HasCompletedOnboarding { get; set; } = false;
+    /// <summary>
+    /// Username to UUID mappings. Each username gets a consistent UUID across sessions.
+    /// This ensures skins persist when changing usernames - switching back uses the same UUID.
+    /// Keys are case-insensitive for lookup but preserve original casing.
+    /// </summary>
+    public Dictionary<string, string> UserUuids { get; set; } = new();
 }
 
 /// <summary>
@@ -7771,6 +8414,16 @@ public class Profile
     public string UUID { get; set; } = "";
     public string Name { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Represents a username->UUID mapping for the frontend.
+/// </summary>
+public class UuidMapping
+{
+    public string Username { get; set; } = "";
+    public string Uuid { get; set; } = "";
+    public bool IsCurrent { get; set; } = false;
 }
 
 /// <summary>
