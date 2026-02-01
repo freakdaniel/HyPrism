@@ -321,9 +321,11 @@ export function SetAccentColor(arg1:string):Promise<boolean>;
 export function GetLauncherDataDirectory():Promise<string>;
 export function SetLauncherDataDirectory(arg1:string):Promise<string|null>;
 
-// Hardware acceleration
-export function GetDisableHardwareAcceleration():Promise<boolean>;
-export function SetDisableHardwareAcceleration(arg1:boolean):Promise<boolean>;
+// Onboarding
+export function GetHasCompletedOnboarding():Promise<boolean>;
+export function SetHasCompletedOnboarding(arg1:boolean):Promise<boolean>;
+export function GetRandomUsername():Promise<string>;
+export function ResetOnboarding():Promise<boolean>;
 
 // Game language settings
 export function SetGameLanguage(arg1:string):Promise<boolean>;

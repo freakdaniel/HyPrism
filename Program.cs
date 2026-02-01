@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -29,11 +30,26 @@ class Program
         // Initialize backend services
         var app = new AppService();
         
-        // Apply hardware acceleration setting before creating window
-        // On Windows, WebView2 uses this environment variable
-        if (app.GetDisableHardwareAcceleration())
+        // Disable GPU acceleration on ALL platforms - use software rendering only
+        // This ensures consistent behavior and avoids GPU-related issues
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu");
+            // Force software rendering to avoid GPU/GBM issues
+            Environment.SetEnvironmentVariable("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+            // Prefer Wayland over X11
+            Environment.SetEnvironmentVariable("GDK_BACKEND", "wayland,x11");
+            // Disable GPU for GTK WebKit
+            Environment.SetEnvironmentVariable("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // Disable GPU for WebView2 on Windows
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-compositing");
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            // Disable GPU acceleration for WebKit on macOS
+            Environment.SetEnvironmentVariable("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
         
         // Get the wwwroot directory
@@ -354,9 +370,11 @@ class Program
                         "GetLauncherDataDirectory" => app.GetLauncherDataDirectory(),
                         "SetLauncherDataDirectory" => await app.SetLauncherDataDirectoryAsync(GetArg<string>(request.Args, 0)),
                         
-                        // Hardware acceleration
-                        "GetDisableHardwareAcceleration" => app.GetDisableHardwareAcceleration(),
-                        "SetDisableHardwareAcceleration" => app.SetDisableHardwareAcceleration(GetArg<bool>(request.Args, 0)),
+                        // Onboarding
+                        "GetHasCompletedOnboarding" => app.GetHasCompletedOnboarding(),
+                        "SetHasCompletedOnboarding" => app.SetHasCompletedOnboarding(GetArg<bool>(request.Args, 0)),
+                        "GetRandomUsername" => app.GetRandomUsername(),
+                        "ResetOnboarding" => app.ResetOnboarding(),
                         
                         // Online mode
                         "GetOnlineMode" => app.GetOnlineMode(),

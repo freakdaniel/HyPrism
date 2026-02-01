@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Github, Bug, Check, AlertTriangle, ChevronDown, ExternalLink, Power, FolderOpen, Trash2, Settings, Database, Globe, Code, Image, User, Edit3, Shuffle, Copy, CheckCircle, Monitor, Download, Archive, Loader2, HardDrive, Languages } from 'lucide-react';
+import { X, Github, Bug, Check, AlertTriangle, ChevronDown, ExternalLink, Power, FolderOpen, Trash2, Settings, Database, Globe, Code, Image, User, Edit3, Shuffle, Copy, CheckCircle, Download, Archive, Loader2, HardDrive, Languages } from 'lucide-react';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { 
     GetCloseAfterLaunch, 
@@ -17,8 +17,6 @@ import {
     SetBackgroundMode,
     GetLauncherDataDirectory,
     SetLauncherDataDirectory,
-    GetDisableHardwareAcceleration,
-    SetDisableHardwareAcceleration,
     GetNick,
     SetNick,
     GetUUID,
@@ -29,7 +27,8 @@ import {
     DeleteGame,
     OpenInstanceFolder,
     GetAvatarPreview,
-    SetGameLanguage
+    SetGameLanguage,
+    ResetOnboarding
 } from '../../wailsjs/go/app/App';
 import type { InstalledVersionInfo } from '../../wailsjs/go/app/App';
 import { useAccentColor } from '../contexts/AccentColorContext';
@@ -128,7 +127,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [backgroundMode, setBackgroundModeState] = useState('slideshow');
     const [showAllBackgrounds, setShowAllBackgrounds] = useState(false);
     const [launcherDataDir, setLauncherDataDir] = useState('');
-    const [disableHardwareAcceleration, setDisableHardwareAcceleration] = useState(false);
     const { accentColor, accentTextColor, setAccentColor: setAccentColorContext } = useAccentColor();
     const [contributors, setContributors] = useState<Contributor[]>([]);
     const [isLoadingContributors, setIsLoadingContributors] = useState(false);
@@ -172,9 +170,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 
                 const dataDir = await GetLauncherDataDirectory();
                 setLauncherDataDir(dataDir || folderPath); // Show real path
-                
-                const hwAccelDisabled = await GetDisableHardwareAcceleration();
-                setDisableHardwareAcceleration(hwAccelDisabled);
                 
                 // Load profile data
                 const username = await GetNick();
@@ -426,15 +421,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }
         } catch (err) {
             console.error('Failed to browse folder:', err);
-        }
-    };
-
-    const handleDisableHardwareAccelerationChange = async (disabled: boolean) => {
-        setDisableHardwareAcceleration(disabled);
-        try {
-            await SetDisableHardwareAcceleration(disabled);
-        } catch (err) {
-            console.error('Failed to set hardware acceleration setting:', err);
         }
     };
 
@@ -999,29 +985,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             />
                                         </div>
                                     </div>
-
-                                    {/* Disable GPU Acceleration */}
-                                    <div 
-                                        className="flex items-center justify-between p-3 rounded-xl bg-[#151515] border border-white/10 cursor-pointer hover:border-white/20 transition-colors"
-                                        onClick={() => handleDisableHardwareAccelerationChange(!disableHardwareAcceleration)}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <Monitor size={18} className="text-white/60" />
-                                            <div>
-                                                <span className="text-white text-sm">{t('Disable GPU Acceleration')}</span>
-                                                <p className="text-xs text-white/40">{t('May help with display issues. Requires restart.')}</p>
-                                            </div>
-                                        </div>
-                                        <div 
-                                            className="w-10 h-6 rounded-full flex items-center transition-colors"
-                                            style={{ backgroundColor: disableHardwareAcceleration ? accentColor : 'rgba(255,255,255,0.2)' }}
-                                        >
-                                            <div 
-                                                className={`w-4 h-4 rounded-full shadow-md transform transition-transform ${disableHardwareAcceleration ? 'translate-x-5' : 'translate-x-1'}`}
-                                                style={{ backgroundColor: disableHardwareAcceleration ? accentTextColor : 'white' }}
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
                             )}
 
@@ -1180,7 +1143,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 {installedInstances.map((instance) => {
                                                     const key = `${instance.Branch}-${instance.Version}`;
                                                     const versionLabel = instance.Version === 0 || instance.Version === undefined ? t('latest') : `v${instance.Version}`;
-                                                    const branchLabel = instance.Branch === 'release' ? t('Release') : t('Pre-Release');
+                                                    // Determine branch from Path - check if path contains 'pre-release' or 'release'
+                                                    const pathLower = (instance.Path || '').toLowerCase();
+                                                    const isReleaseFromPath = pathLower.includes('/release/') || pathLower.includes('\\release\\') || pathLower.includes('/release-') || pathLower.includes('\\release-');
+                                                    const isPreReleaseFromPath = pathLower.includes('/pre-release/') || pathLower.includes('\\pre-release\\') || pathLower.includes('/pre-release-') || pathLower.includes('\\pre-release-');
+                                                    // Use path-based detection, fallback to Branch property
+                                                    const isRelease = isPreReleaseFromPath ? false : (isReleaseFromPath ? true : (instance.Branch?.toLowerCase() === 'release'));
+                                                    const branchLabel = isRelease ? t('Release') : t('Pre-Release');
                                                     const isExporting = exportingInstance === key;
                                                     
                                                     return (
@@ -1349,6 +1318,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             {t('HyPrism is an unofficial launcher for Hytale. This project is not affiliated with Hypixel Studios.')}
                                         </p>
                                     </div>
+
+                                    {/* Replay Introduction Button */}
+                                    <button
+                                        onClick={async () => {
+                                            await ResetOnboarding();
+                                            window.location.reload();
+                                        }}
+                                        className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm"
+                                    >
+                                        {t('Replay Introduction')}
+                                    </button>
                                 </div>
                             )}
 
@@ -1360,6 +1340,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             <AlertTriangle size={16} />
                                             {t('Developer options are for testing only')}
                                         </div>
+                                    </div>
+
+                                    {/* Show Intro on Next Launch */}
+                                    <div className="p-4 rounded-xl bg-[#151515] border border-white/5 space-y-4">
+                                        <h3 className="text-white font-medium text-sm">{t('Onboarding')}</h3>
+                                        <button
+                                            onClick={async () => {
+                                                await ResetOnboarding();
+                                                alert(t('Intro will show on next launch. Please restart the launcher.'));
+                                            }}
+                                            className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm"
+                                        >
+                                            {t('Show Intro on Next Launch')}
+                                        </button>
                                     </div>
 
                                     <div className="p-4 rounded-xl bg-[#151515] border border-white/5">

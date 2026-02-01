@@ -588,12 +588,21 @@ export function SetLauncherDataDirectory(path) {
     return callBackend('SetLauncherDataDirectory', path);
 }
 
-export function GetDisableHardwareAcceleration() {
-    return callBackend('GetDisableHardwareAcceleration');
+// Onboarding
+export function GetHasCompletedOnboarding() {
+    return callBackend('GetHasCompletedOnboarding');
 }
 
-export function SetDisableHardwareAcceleration(disabled) {
-    return callBackend('SetDisableHardwareAcceleration', disabled);
+export function SetHasCompletedOnboarding(completed) {
+    return callBackend('SetHasCompletedOnboarding', completed);
+}
+
+export function GetRandomUsername() {
+    return callBackend('GetRandomUsername');
+}
+
+export function ResetOnboarding() {
+    return callBackend('ResetOnboarding');
 }
 
 export function SetGameLanguage(languageCode) {

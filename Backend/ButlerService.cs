@@ -226,7 +226,7 @@ public class ButlerService
         }
     }
 
-    public async Task ApplyPwrAsync(string pwrFile, string targetDir, Action<int, string>? progressCallback = null)
+    public async Task ApplyPwrAsync(string pwrFile, string targetDir, Action<int, string>? progressCallback = null, CancellationToken externalCancellationToken = default)
     {
         string butlerPath = await EnsureButlerInstalledAsync(progressCallback);
         string stagingDir = Path.Combine(targetDir, "staging-temp");
@@ -265,41 +265,125 @@ public class ButlerService
             throw new Exception("Failed to start Butler process");
         }
 
-        // Read output for progress (butler outputs progress info)
+        // Use a timeout for the entire operation (8 minutes max) combined with external cancellation
+        using var timeoutCts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(8));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, externalCancellationToken);
+        var cts = linkedCts;
+        
+        // Track progress with a simulated progress if butler doesn't report
+        int lastProgress = 10;
+        var progressTimer = new System.Timers.Timer(2000); // Update every 2 seconds
+        progressTimer.Elapsed += (s, e) =>
+        {
+            // Simulate progress if no updates from butler (max 90%)
+            if (lastProgress < 90)
+            {
+                lastProgress = Math.Min(lastProgress + 2, 90);
+                progressCallback?.Invoke(lastProgress, "Installing game...");
+            }
+        };
+        progressTimer.Start();
+
         string output = "";
         string error = "";
 
-        var outputTask = Task.Run(async () =>
+        try
         {
-            while (!process.StandardOutput.EndOfStream)
+            // Read output and error concurrently but with proper handling
+            var outputBuilder = new System.Text.StringBuilder();
+            var errorBuilder = new System.Text.StringBuilder();
+
+            var outputTask = Task.Run(async () =>
             {
-                var line = await process.StandardOutput.ReadLineAsync();
-                if (line != null)
+                try
                 {
-                    output += line + "\n";
-                    // Parse progress from butler output if available
-                    if (line.Contains("%"))
+                    char[] buffer = new char[1024];
+                    while (true)
                     {
-                        // Butler outputs progress like "patching 45.2%"
-                        var match = System.Text.RegularExpressions.Regex.Match(line, @"(\d+(?:\.\d+)?)%");
-                        if (match.Success && double.TryParse(match.Groups[1].Value, out double pct))
+                        int read = await process.StandardOutput.ReadAsync(buffer, cts.Token);
+                        if (read == 0) break;
+                        
+                        string chunk = new string(buffer, 0, read);
+                        outputBuilder.Append(chunk);
+                        
+                        // Parse progress from butler output if available
+                        if (chunk.Contains("%"))
                         {
-                            // Map butler progress (0-100) to our range (10-95)
-                            int mappedProgress = 10 + (int)(pct * 0.85);
-                            progressCallback?.Invoke(mappedProgress, "Installing game...");
+                            // Butler outputs progress like "patching 45.2%"
+                            var match = System.Text.RegularExpressions.Regex.Match(chunk, @"(\d+(?:\.\d+)?)%");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, 
+                                System.Globalization.NumberStyles.Any, 
+                                System.Globalization.CultureInfo.InvariantCulture, 
+                                out double pct))
+                            {
+                                // Map butler progress (0-100) to our range (10-95)
+                                int mappedProgress = 10 + (int)(pct * 0.85);
+                                if (mappedProgress > lastProgress)
+                                {
+                                    lastProgress = mappedProgress;
+                                    progressCallback?.Invoke(mappedProgress, "Installing game...");
+                                }
+                            }
                         }
                     }
                 }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) 
+                { 
+                    Logger.Warning("Butler", $"Output read error: {ex.Message}");
+                }
+            }, cts.Token);
+
+            var errorTask = Task.Run(async () =>
+            {
+                try
+                {
+                    errorBuilder.Append(await process.StandardError.ReadToEndAsync(cts.Token));
+                }
+                catch (OperationCanceledException) { }
+                catch { }
+            }, cts.Token);
+
+            // Wait for process to exit with timeout
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
             }
-        });
+            catch (OperationCanceledException)
+            {
+                if (externalCancellationToken.IsCancellationRequested)
+                {
+                    Logger.Info("Butler", "Butler process cancelled by user");
+                    try { process.Kill(); } catch { }
+                    CleanStagingDirectory(targetDir);
+                    throw new OperationCanceledException("Download cancelled by user.");
+                }
+                else
+                {
+                    Logger.Error("Butler", "Butler process timed out after 8 minutes");
+                    try { process.Kill(); } catch { }
+                    throw new Exception("Installation timed out. Please try again.");
+                }
+            }
 
-        var errorTask = Task.Run(async () =>
+            // Give output tasks a short time to finish after process exits
+            try
+            {
+                await Task.WhenAll(outputTask, errorTask).WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                Logger.Warning("Butler", "Output tasks did not finish in time");
+            }
+
+            output = outputBuilder.ToString();
+            error = errorBuilder.ToString();
+        }
+        finally
         {
-            error = await process.StandardError.ReadToEndAsync();
-        });
-
-        await Task.WhenAll(outputTask, errorTask);
-        await process.WaitForExitAsync();
+            progressTimer.Stop();
+            progressTimer.Dispose();
+        }
 
         if (process.ExitCode != 0)
         {

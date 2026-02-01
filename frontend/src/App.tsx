@@ -19,6 +19,7 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => 
 const UpdateConfirmationModal = lazy(() => import('./components/UpdateConfirmationModal').then(m => ({ default: m.UpdateConfirmationModal })));
 const NewsPreview = lazy(() => import('./components/NewsPreview').then(m => ({ default: m.NewsPreview })));
 const ProfileEditor = lazy(() => import('./components/ProfileEditor').then(m => ({ default: m.ProfileEditor })));
+const OnboardingModal = lazy(() => import('./components/OnboardingModal').then(m => ({ default: m.OnboardingModal })));
 
 import {
   DownloadAndLaunch,
@@ -31,6 +32,7 @@ import {
   ExitGame,
   IsGameRunning,
   GetRecentLogs,
+  CancelDownload,
   // Version Manager
   GetVersionType,
   SetVersionType,
@@ -54,6 +56,7 @@ import {
   GetBackgroundMode,
   GetDisableNews,
   GetAccentColor,
+  GetHasCompletedOnboarding,
 } from '../wailsjs/go/app/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import appIcon from './assets/appicon.png';
@@ -82,7 +85,7 @@ const parseDateMs = (dateValue: string | number | Date | undefined): number => {
 
 const fetchLauncherReleases = async () => {
   try {
-    const res = await fetch('https://api.github.com/repos/yyyumeniku/TEST/releases?per_page=100');
+    const res = await fetch('https://api.github.com/repos/yyyumeniku/HyPrism/releases?per_page=100');
     if (!res.ok) return [] as Array<{ item: any; dateMs: number }>;
     const data = await res.json();
     return (Array.isArray(data) ? data : []).map((r: any) => {
@@ -93,7 +96,7 @@ const fetchLauncherReleases = async () => {
         item: {
           title: `Hyprism ${cleaned || 'Release'} release`,
           excerpt: `Hyprism ${cleaned || 'Release'} release — click to see changelog.`,
-          url: r?.html_url || 'https://github.com/yyyumeniku/TEST/releases',
+          url: r?.html_url || 'https://github.com/yyyumeniku/HyPrism/releases',
           date: new Date(dateMs || Date.now()).toLocaleDateString(),
           author: 'HyPrism',
           imageUrl: appIcon,
@@ -183,6 +186,10 @@ const App: React.FC = () => {
   const [backgroundMode, setBackgroundMode] = useState<string>('slideshow');
   const [newsDisabled, setNewsDisabled] = useState<boolean>(false);
   const [_accentColor, setAccentColor] = useState<string>('#FFA845'); // Used only for SettingsModal callback
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+  const [onboardingChecked, setOnboardingChecked] = useState<boolean>(false);
 
   // Pending game update modal
   const [pendingUpdate, setPendingUpdate] = useState<{
@@ -335,6 +342,40 @@ const App: React.FC = () => {
     setAvatarRefreshTrigger(prev => prev + 1);
   };
 
+  // Check if onboarding has been completed
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const completed = await GetHasCompletedOnboarding();
+        if (!completed) {
+          setShowOnboarding(true);
+        }
+        setOnboardingChecked(true);
+      } catch (err) {
+        console.error('Failed to check onboarding status:', err);
+        setOnboardingChecked(true); // Continue even if check fails
+      }
+    };
+    checkOnboarding();
+  }, []);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = async () => {
+    setShowOnboarding(false);
+    // Reload profile data after onboarding
+    await reloadProfile();
+    // Reload instance directory
+    try {
+      const dir = await GetCustomInstanceDir();
+      if (dir) setCustomInstanceDir(dir);
+    } catch { /* ignore */ }
+    // Reload background mode (user may have changed it in onboarding)
+    try {
+      const mode = await GetBackgroundMode();
+      setBackgroundMode(mode || 'slideshow');
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     // Initialize user settings
     GetNick().then((n: string) => n && setUsername(n));
@@ -426,25 +467,41 @@ const App: React.FC = () => {
 
     // Event listeners
     const unsubProgress = EventsOn('progress-update', (data: any) => {
+      // Handle cancellation first
+      if (data.stage === 'cancelled') {
+        console.log('Download cancelled event received');
+        setIsDownloading(false);
+        setProgress(0);
+        setDownloaded(0);
+        setTotal(0);
+        setDownloadState('downloading');
+        return;
+      }
+
       setProgress(data.progress);
       setDownloaded(data.downloaded);
       setTotal(data.total);
 
-      // Update download state based on progress ranges
-      if (data.progress >= 0 && data.progress < 5) {
-        setDownloadState('downloading'); // Butler installation
-      } else if (data.progress >= 5 && data.progress < 70) {
-        setDownloadState('downloading'); // Downloading PWR
-      } else if (data.progress >= 70 && data.progress < 100) {
-        setDownloadState('extracting'); // Extracting with butler
-      } else if (data.progress >= 100) {
-        setDownloadState('launching'); // Ready to launch
-      }
-
-      // When complete stage with 100% is received, game is launching
-      if (data.stage === 'complete' && data.progress >= 100) {
+      // Update download state based on stage or progress ranges
+      if (data.stage === 'download' || data.stage === 'update') {
+        setDownloadState('downloading');
+      } else if (data.stage === 'install') {
+        setDownloadState('extracting');
+      } else if (data.stage === 'complete') {
+        setDownloadState('launching');
         // Game is now installed, update state
-        setIsVersionInstalled(true);
+        if (data.progress >= 100) {
+          setIsVersionInstalled(true);
+        }
+      } else {
+        // Fallback to progress-based detection
+        if (data.progress >= 0 && data.progress < 70) {
+          setDownloadState('downloading');
+        } else if (data.progress >= 70 && data.progress < 100) {
+          setDownloadState('extracting');
+        } else if (data.progress >= 100) {
+          setDownloadState('launching');
+        }
       }
     });
     
@@ -614,14 +671,24 @@ const App: React.FC = () => {
   };
 
   const handleCancelDownload = async () => {
+    console.log('Cancel download requested');
+    // Immediately update UI to show cancellation is happening
+    setDownloadState('downloading');
     try {
-      await CancelDownload();
+      const result = await CancelDownload();
+      console.log('Cancel download result:', result);
+      // Reset state immediately on successful cancel call
       setIsDownloading(false);
       setProgress(0);
       setDownloaded(0);
       setTotal(0);
     } catch (err) {
       console.error('Cancel failed:', err);
+      // Still try to reset UI state even if call fails
+      setIsDownloading(false);
+      setProgress(0);
+      setDownloaded(0);
+      setTotal(0);
     }
   };
 
@@ -712,6 +779,22 @@ const App: React.FC = () => {
       });
     }
   };
+
+  // Show loading screen until onboarding check is complete to prevent UI flash
+  if (!onboardingChecked) {
+    return (
+      <div className="fixed inset-0 bg-[#0a0a0a] z-[100]" />
+    );
+  }
+
+  // If onboarding needs to be shown, render only the onboarding modal
+  if (showOnboarding) {
+    return (
+      <Suspense fallback={<div className="fixed inset-0 bg-[#0a0a0a]" />}>
+        <OnboardingModal onComplete={handleOnboardingComplete} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="relative w-screen h-screen bg-[#090909] text-white overflow-hidden font-sans select-none">
@@ -806,7 +889,7 @@ const App: React.FC = () => {
           onCancelDownload={handleCancelDownload}
           isDownloading={isDownloading}
           downloadState={downloadState}
-          canCancel={downloadState === 'downloading' && !isGameRunning}
+          canCancel={isDownloading && !isGameRunning && (downloadState === 'downloading' || downloadState === 'extracting')}
           isGameRunning={isGameRunning}
           isVersionInstalled={isVersionInstalled}
           isCheckingInstalled={isCheckingInstalled}
