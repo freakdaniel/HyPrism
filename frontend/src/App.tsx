@@ -82,15 +82,15 @@ const parseDateMs = (dateValue: string | number | Date | undefined): number => {
   return Number.isNaN(ms) ? 0 : ms;
 };
 
-const formatDateConsistent = (dateMs: number) => {
-  return new Date(dateMs).toLocaleDateString(undefined, {
+const formatDateConsistent = (dateMs: number, locale = 'en-US') => {
+  return new Date(dateMs).toLocaleDateString(locale, {
     day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
 };
 
-const fetchLauncherReleases = async () => {
+const fetchLauncherReleases = async (locale: string) => {
   try {
     const res = await fetch('https://api.github.com/repos/yyyumeniku/HyPrism/releases?per_page=100');
     if (!res.ok) return [] as Array<{ item: any; dateMs: number }>;
@@ -104,7 +104,7 @@ const fetchLauncherReleases = async () => {
           title: `Hyprism ${cleaned || 'Release'} release`,
           excerpt: `Hyprism ${cleaned || 'Release'} release — click to see changelog.`,
           url: r?.html_url || 'https://github.com/yyyumeniku/HyPrism/releases',
-          date: formatDateConsistent(dateMs || Date.now()),
+          date: formatDateConsistent(dateMs || Date.now(), locale),
           author: 'HyPrism',
           imageUrl: appIcon,
           source: 'hyprism' as const,
@@ -120,7 +120,7 @@ const fetchLauncherReleases = async () => {
 
 
 const App: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // User state
   const [username, setUsername] = useState<string>("HyPrism");
   const [uuid, setUuid] = useState<string>("");
@@ -848,7 +848,7 @@ const App: React.FC = () => {
                 <NewsPreview
                   isPaused={isDownloading}
                   getNews={async (count) => {
-                    const releases = await fetchLauncherReleases();
+                    const releases = await fetchLauncherReleases(i18n.language);
                     const hytale = await GetNews(Math.max(0, count));
 
                     const hytaleItems = (hytale || []).map((item: any) => {
@@ -857,7 +857,7 @@ const App: React.FC = () => {
                         item: { 
                           ...item, 
                           source: 'hytale' as const,
-                          date: formatDateConsistent(dateMs)
+                          date: formatDateConsistent(dateMs, i18n.language)
                         },
                         dateMs
                       };
