@@ -87,6 +87,13 @@ public class MainViewModel : ReactiveObject
         get => _isConfigOpen;
         set => this.RaiseAndSetIfChanged(ref _isConfigOpen, value);
     }
+    
+    private bool _isProfileEditorOpen;
+    public bool IsProfileEditorOpen
+    {
+        get => _isProfileEditorOpen;
+        set => this.RaiseAndSetIfChanged(ref _isProfileEditorOpen, value);
+    }
 
     private readonly ObservableAsPropertyHelper<bool> _isOverlayOpen;
     public bool IsOverlayOpen => _isOverlayOpen.Value;
@@ -104,6 +111,13 @@ public class MainViewModel : ReactiveObject
     {
         get => _modManagerViewModel;
         set => this.RaiseAndSetIfChanged(ref _modManagerViewModel, value);
+    }
+    
+    private ProfileEditorViewModel? _profileEditorViewModel;
+    public ProfileEditorViewModel? ProfileEditorViewModel
+    {
+        get => _profileEditorViewModel;
+        set => this.RaiseAndSetIfChanged(ref _profileEditorViewModel, value);
     }
 
     public ObservableCollection<string> Branches { get; } = new() { "Release", "Pre-Release" };
@@ -123,6 +137,7 @@ public class MainViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> OpenFolderCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleModsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleProfileEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshNewsCommand { get; }
     public ReactiveCommand<string, Unit> OpenNewsLinkCommand { get; }
     
@@ -132,8 +147,12 @@ public class MainViewModel : ReactiveObject
         _nick = AppService.Configuration.Nick;
         
         // Output properties
-        _isOverlayOpen = this.WhenAnyValue(x => x.IsSettingsOpen, x => x.IsModsOpen, (s, m) => s || m)
-                             .ToProperty(this, x => x.IsOverlayOpen);
+        _isOverlayOpen = this.WhenAnyValue(
+                x => x.IsSettingsOpen, 
+                x => x.IsModsOpen, 
+                x => x.IsProfileEditorOpen,
+                (s, m, p) => s || m || p)
+            .ToProperty(this, x => x.IsOverlayOpen);
         
         // Initialize child VMs
         SettingsViewModel = new SettingsViewModel(AppService);
@@ -150,7 +169,11 @@ public class MainViewModel : ReactiveObject
         ToggleSettingsCommand = ReactiveCommand.Create(() => 
         {
             IsSettingsOpen = !IsSettingsOpen;
-            if (IsSettingsOpen) IsModsOpen = false;
+            if (IsSettingsOpen)
+            {
+                IsModsOpen = false;
+                IsProfileEditorOpen = false;
+            }
         });
         
         ToggleModsCommand = ReactiveCommand.Create(() => 
@@ -162,7 +185,31 @@ public class MainViewModel : ReactiveObject
                 ModManagerViewModel.CloseCommand.Subscribe(_ => IsModsOpen = false);
             }
             IsModsOpen = !IsModsOpen;
-            if (IsModsOpen) IsSettingsOpen = false;
+            if (IsModsOpen)
+            {
+                IsSettingsOpen = false;
+                IsProfileEditorOpen = false;
+            }
+        });
+        
+        ToggleProfileEditorCommand = ReactiveCommand.CreateFromTask(async () => 
+        {
+            if (!IsProfileEditorOpen)
+            {
+                ProfileEditorViewModel = new ProfileEditorViewModel(AppService);
+                // Close command handling
+                var closeCmd = ProfileEditorViewModel.CloseCommand as ReactiveCommand<Unit, Unit>;
+                closeCmd?.Subscribe(_ => IsProfileEditorOpen = false);
+                // Profile update handling
+                ProfileEditorViewModel.ProfileUpdated += () => Nick = AppService.Configuration.Nick;
+                await ProfileEditorViewModel.LoadProfileAsync();
+            }
+            IsProfileEditorOpen = !IsProfileEditorOpen;
+            if (IsProfileEditorOpen)
+            {
+                IsSettingsOpen = false;
+                IsModsOpen = false;
+            }
         });
         
         RefreshNewsCommand = ReactiveCommand.CreateFromTask(LoadNewsAsync);

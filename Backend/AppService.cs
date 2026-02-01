@@ -12,6 +12,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using HyPrism.Backend.Services;
+using HyPrism.Backend.Models;
 
 namespace HyPrism.Backend;
 
@@ -26,8 +28,20 @@ public class AppService : IDisposable
     private CancellationTokenSource? _downloadCts;
     private bool _disposed;
     
+    // New services
+    private readonly ConfigService _configService;
+    private readonly ProfileService _profileService;
+    private readonly NewsService _newsService;
+    private readonly VersionService _versionService;
+    private readonly DownloadService _downloadService;
+    private readonly ModService _modService;
+    
     // Exposed for ViewModel access
     public Config Configuration => _config;
+    public ProfileService ProfileService => _profileService;
+    public NewsService NewsService => _newsService;
+    public VersionService VersionService => _versionService;
+    public ModService ModService => _modService;
 
     // UI Events
     public event Action<string, double, string, long, long>? DownloadProgressChanged;
@@ -64,6 +78,36 @@ public class AppService : IDisposable
         HttpClient.DefaultRequestHeaders.Add("User-Agent", "HyPrism/1.0");
         HttpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
+    
+    /// <summary>
+    /// Loads environment variables from .env file (if present) for Discord bot configuration.
+    /// </summary>
+    private static void LoadEnvFile()
+    {
+        try
+        {
+            var envPath = Path.Combine(AppContext.BaseDirectory, ".env");
+            if (!File.Exists(envPath)) return;
+            
+            foreach (var line in File.ReadAllLines(envPath))
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
+                
+                var parts = trimmed.Split('=', 2);
+                if (parts.Length == 2)
+                {
+                    var key = parts[0].Trim();
+                    var value = parts[1].Trim();
+                    // Remove quotes if present
+                    if (value.StartsWith('"') && value.EndsWith('"'))
+                        value = value.Substring(1, value.Length - 2);
+                    Environment.SetEnvironmentVariable(key, value);
+                }
+            }
+        }
+        catch { /* Ignore errors loading .env file */ }
+    }
 
     public AppService()
     {
@@ -71,6 +115,15 @@ public class AppService : IDisposable
         Directory.CreateDirectory(_appDir);
         _configPath = Path.Combine(_appDir, "config.json");
         _config = LoadConfig();
+        
+        // Initialize new services
+        _configService = new ConfigService(_appDir);
+        _config = _configService.Configuration; // Use config from ConfigService
+        _profileService = new ProfileService(_appDir, _configService);
+        _newsService = new NewsService();
+        _versionService = new VersionService(_appDir, HttpClient, _configService);
+        _downloadService = new DownloadService(HttpClient);
+        _modService = new ModService(HttpClient, _appDir);
         
         // Update placeholder names to random ones immediately
         if (_config.Nick == "Hyprism" || _config.Nick == "HyPrism" || _config.Nick == "Player")
@@ -1272,99 +1325,27 @@ public class AppService : IDisposable
     // Config
     public Config QueryConfig() => _config;
 
-    public string GetNick() => _config.Nick;
+    public string GetNick() => _profileService.GetNick();
     
-    public string GetUUID() => GetCurrentUuid();
+    public string GetUUID() => _profileService.GetUUID();
     
     /// <summary>
     /// Gets the avatar preview image as base64 data URL for displaying in the launcher.
     /// Returns null if no avatar preview exists.
     /// </summary>
-    public string? GetAvatarPreview()
-    {
-        return GetAvatarPreviewForUUID(GetCurrentUuid());
-    }
+    public string? GetAvatarPreview() => _profileService.GetAvatarPreview();
     
     /// <summary>
     /// Gets the avatar preview for a specific UUID.
     /// Checks profile folder first, then game cache, then persistent backup.
     /// </summary>
-    public string? GetAvatarPreviewForUUID(string uuid)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(uuid))
-            {
-                return null;
-            }
-            
-            // First check profile folder (most reliable for stored profiles)
-            var profile = _config.Profiles?.FirstOrDefault(p => p.UUID == uuid);
-            if (profile != null)
-            {
-                var profilesDir = GetProfilesFolder();
-                var safeName = SanitizeFileName(profile.Name);
-                var profileDir = Path.Combine(profilesDir, safeName);
-                var profileAvatarPath = Path.Combine(profileDir, "avatar.png");
-                
-                if (File.Exists(profileAvatarPath) && new FileInfo(profileAvatarPath).Length > 100)
-                {
-                    var bytes = File.ReadAllBytes(profileAvatarPath);
-                    return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
-                }
-            }
-            
-            var branch = NormalizeVersionType(_config.VersionType);
-            var versionPath = ResolveInstancePath(branch, 0, preferExisting: true);
-            var userDataPath = GetInstanceUserDataPath(versionPath);
-            var cacheDir = Path.Combine(userDataPath, "CachedAvatarPreviews");
-            var cachePath = Path.Combine(cacheDir, $"{uuid}.png");
-            var persistentPath = Path.Combine(_appDir, "AvatarBackups", $"{uuid}.png");
-            
-            // Check what files exist
-            var cacheExists = File.Exists(cachePath) && new FileInfo(cachePath).Length > 100;
-            var persistentExists = File.Exists(persistentPath) && new FileInfo(persistentPath).Length > 100;
-            
-            // Use cache if available (prefer newer file)
-            if (cacheExists)
-            {
-                var cacheInfo = new FileInfo(cachePath);
-                var persistentInfo = persistentExists ? new FileInfo(persistentPath) : null;
-                var useCache = persistentInfo == null || cacheInfo.LastWriteTimeUtc > persistentInfo.LastWriteTimeUtc;
-                
-                if (useCache)
-                {
-                    var bytes = File.ReadAllBytes(cachePath);
-                    // Backup to persistent storage
-                    try
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(persistentPath)!);
-                        File.Copy(cachePath, persistentPath, true);
-                    }
-                    catch { }
-                    return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
-                }
-            }
-            
-            // Fall back to persistent backup
-            if (persistentExists)
-            {
-                var bytes = File.ReadAllBytes(persistentPath);
-                return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
-            }
-            
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Avatar", $"Could not load avatar preview: {ex.Message}");
-            return null;
-        }
-    }
+    public string? GetAvatarPreviewForUUID(string uuid) => _profileService.GetAvatarPreviewForUUID(uuid);
 
     public string GetCustomInstanceDir() => _config.InstanceDirectory ?? "";
 
-    public bool SetUUID(string uuid)
+    public bool SetUUID(string uuid) => _profileService.SetUUID(uuid);
+    
+    private bool SetUUIDInternal(string uuid)
     {
         if (string.IsNullOrWhiteSpace(uuid)) return false;
         if (!Guid.TryParse(uuid.Trim(), out var parsed)) return false;
@@ -1419,7 +1400,9 @@ public class AppService : IDisposable
         }
     }
     
-    public bool SetNick(string nick)
+    public bool SetNick(string nick) => _profileService.SetNick(nick);
+    
+    private bool SetNickInternal(string nick)
     {
         // Validate nickname length (1-16 characters)
         var trimmed = nick?.Trim() ?? "";
@@ -2968,139 +2951,7 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
 
     // Returns list of available version numbers by checking Hytale's patch server
     // Uses caching to start from the last known version instead of version 1
-    public async Task<List<int>> GetVersionListAsync(string branch)
-    {
-        var normalizedBranch = NormalizeVersionType(branch);
-
-        var result = new List<int>();
-        string osName = GetOS();
-        string arch = GetArch();
-        string apiVersionType = normalizedBranch;
-
-        // Load version cache
-        var cache = LoadVersionCache();
-        int startVersion = 1;
-        
-        // If we have cached versions for this branch, start from the highest known version + 1
-        if (cache.KnownVersions.TryGetValue(normalizedBranch, out var knownVersions) && knownVersions.Count > 0)
-        {
-            startVersion = knownVersions.Max() + 1; // Start checking from the NEXT version after the highest known
-            // Add all known versions to result first
-            result.AddRange(knownVersions);
-        }
-
-        // Check for new versions starting from startVersion
-        int currentVersion = startVersion;
-        int consecutiveFailures = 0;
-        const int maxConsecutiveFailures = 3; // Stop after 3 consecutive non-existent versions
-
-        while (consecutiveFailures < maxConsecutiveFailures)
-        {
-            var (version, exists) = await CheckVersionExistsAsync(osName, arch, apiVersionType, currentVersion);
-            
-            if (exists)
-            {
-                if (!result.Contains(version))
-                {
-                    result.Add(version);
-                }
-                consecutiveFailures = 0;
-            }
-            else
-            {
-                consecutiveFailures++;
-            }
-            
-            currentVersion++;
-        }
-
-        // Also verify that all cached versions still exist (in parallel)
-        if (knownVersions != null && knownVersions.Count > 0)
-        {
-            var verifyTasks = knownVersions
-                .Where(v => v < startVersion)
-                .Select(v => CheckVersionExistsAsync(osName, arch, apiVersionType, v))
-                .ToList();
-            
-            if (verifyTasks.Count > 0)
-            {
-                var verifyResults = await Task.WhenAll(verifyTasks);
-                foreach (var (version, exists) in verifyResults)
-                {
-                    if (exists && !result.Contains(version))
-                    {
-                        result.Add(version);
-                    }
-                }
-            }
-        }
-
-        result.Sort((a, b) => b.CompareTo(a)); // Sort descending (latest first)
-        
-        // Save updated cache
-        cache.KnownVersions[normalizedBranch] = result;
-        cache.LastUpdated = DateTime.UtcNow;
-        SaveVersionCache(cache);
-        
-        Logger.Info("Version", $"Found {result.Count} versions for {branch}: [{string.Join(", ", result)}]");
-        return result;
-    }
-
-    private string GetVersionCachePath()
-    {
-        return Path.Combine(_appDir, "version_cache.json");
-    }
-
-    private VersionCache LoadVersionCache()
-    {
-        try
-        {
-            var path = GetVersionCachePath();
-            if (File.Exists(path))
-            {
-                var json = File.ReadAllText(path);
-                var cache = JsonSerializer.Deserialize<VersionCache>(json);
-                if (cache != null)
-                {
-                    return cache;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Version", $"Failed to load version cache: {ex.Message}");
-        }
-        return new VersionCache();
-    }
-
-    private void SaveVersionCache(VersionCache cache)
-    {
-        try
-        {
-            var path = GetVersionCachePath();
-            var json = JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(path, json);
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Version", $"Failed to save version cache: {ex.Message}");
-        }
-    }
-
-    private async Task<(int version, bool exists)> CheckVersionExistsAsync(string os, string arch, string versionType, int version)
-    {
-        try
-        {
-            string url = $"https://game-patches.hytale.com/patches/{os}/{arch}/{versionType}/0/{version}.pwr";
-            using var request = new HttpRequestMessage(HttpMethod.Head, url);
-            using var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-            return (version, response.IsSuccessStatusCode);
-        }
-        catch
-        {
-            return (version, false);
-        }
-    }
+    public async Task<List<int>> GetVersionListAsync(string branch) => await _versionService.GetVersionListAsync(branch);
 
     public bool SetSelectedVersion(int versionNumber)
     {
@@ -4047,36 +3898,7 @@ export HYPRISM_PROFILE_ID=""{profile.Id}""
 
     private async Task DownloadFileAsync(string url, string path, Action<int, long, long> progressCallback, CancellationToken cancellationToken = default)
     {
-        using var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        
-        var totalBytes = response.Content.Headers.ContentLength ?? -1;
-        var canReportProgress = totalBytes > 0;
-        
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 8192);
-        
-        var buffer = new byte[8192];
-        long totalRead = 0;
-        int bytesRead;
-        int lastReportedProgress = -1;
-        
-        while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
-            totalRead += bytesRead;
-            
-            if (canReportProgress)
-            {
-                var progress = (int)((totalRead * 100) / totalBytes);
-                // Only report if progress changed to reduce spam
-                if (progress != lastReportedProgress)
-                {
-                    progressCallback(progress, totalRead, totalBytes);
-                    lastReportedProgress = progress;
-                }
-            }
-        }
+        await _downloadService.DownloadFileAsync(url, path, progressCallback, cancellationToken);
     }
 
     // Extract Assets.zip to the correct location for macOS
@@ -5790,57 +5612,109 @@ exec env \
         // instance root so the frontend can show it and collect user input manually.
         return Task.FromResult<string?>(GetInstanceRoot());
     }
-
-    // News - matches Go implementation
-    public async Task<List<NewsItemResponse>> GetNewsAsync(int count)
+    
+    /// <summary>
+    /// Opens a folder browser dialog and returns the selected path.
+    /// </summary>
+    public async Task<string?> BrowseFolder(string? initialPath = null)
     {
         try
         {
-            string url = $"https://hytale.com/api/blog/post/published?limit={count}";
-            var response = await HttpClient.GetStringAsync(url);
-            var newsItems = JsonSerializer.Deserialize<List<HytaleNewsItem>>(response, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            });
-            
-            if (newsItems == null) return new List<NewsItemResponse>();
-
-            const string cdnUrl = "https://cdn.hytale.com/variants/blog_thumb_";
-            var result = new List<NewsItemResponse>();
-
-            foreach (var item in newsItems)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Parse URL from publishedAt and slug
-                var url2 = "";
-                var date = "";
-                if (DateTime.TryParse(item.PublishedAt, out var parsedDate))
+                var script = $@"Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; ";
+                if (!string.IsNullOrEmpty(initialPath) && Directory.Exists(initialPath))
+                    script += $@"$dialog.SelectedPath = '{initialPath.Replace("'", "''")}'; ";
+                script += @"if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath }";
+                
+                var psi = new ProcessStartInfo
                 {
-                    url2 = $"https://hytale.com/news/{parsedDate.Year}/{parsedDate.Month}/{item.Slug}";
-                    date = parsedDate.ToString("MMMM dd, yyyy");
-                }
-
-                result.Add(new NewsItemResponse
-                {
-                    Title = item.Title ?? "",
-                    Excerpt = CleanNewsExcerpt(item.BodyExcerpt, item.Title),
-                    Url = url2,
-                    Date = date,
-                    PublishedAt = item.PublishedAt ?? "",
-                    Author = item.Author ?? "Hytale Team",
-                    ImageUrl = !string.IsNullOrEmpty(item.CoverImage?.S3Key) 
-                        ? cdnUrl + item.CoverImage.S3Key 
-                        : ""
-                });
+                    FileName = "powershell",
+                    Arguments = $"-NoProfile -Command \"{script}\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                
+                using var process = Process.Start(psi);
+                if (process == null) return null;
+                
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                
+                return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
             }
-
-            return result;
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                var initialDir = !string.IsNullOrEmpty(initialPath) && Directory.Exists(initialPath) 
+                    ? $"default location \"{initialPath}\"" 
+                    : "";
+                    
+                var script = $@"tell application ""Finder""
+                    activate
+                    set theFolder to choose folder with prompt ""Select Folder"" {initialDir}
+                    return POSIX path of theFolder
+                end tell";
+                
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "osascript",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                
+                using var process = Process.Start(psi);
+                if (process == null) return null;
+                
+                await process.StandardInput.WriteAsync(script);
+                process.StandardInput.Close();
+                
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                
+                return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+            }
+            else
+            {
+                // Linux - use zenity
+                var args = "--file-selection --directory --title=\"Select Folder\"";
+                if (!string.IsNullOrEmpty(initialPath) && Directory.Exists(initialPath))
+                    args += $" --filename=\"{initialPath}/\"";
+                    
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "zenity",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                
+                using var process = Process.Start(psi);
+                if (process == null) return null;
+                
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                
+                return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+            }
         }
         catch (Exception ex)
         {
-            Logger.Error("News", $"Error fetching news: {ex.Message}");
-            return new List<NewsItemResponse>();
+            Logger.Warning("Files", $"Failed to browse folder: {ex.Message}");
+            return null;
         }
     }
+
+    // News - matches Go implementation
+    public async Task<List<NewsItemResponse>> GetNewsAsync(int count) => await _newsService.GetNewsAsync(count);
+    
+    /// <summary>
+    /// Synchronous wrapper for GetNewsAsync to maintain compatibility with frontend.
+    /// </summary>
+    public Task<List<NewsItemResponse>> GetNews(int count) => GetNewsAsync(count);
 
     /// <summary>
     /// Cleans news excerpt by removing HTML tags, duplicate title, and date prefixes.
@@ -6443,6 +6317,56 @@ rm -f ""$0""
         }
     }
 
+    // Delegate to ModService
+    public List<InstalledMod> GetInstanceInstalledMods(string instancePath) => 
+        ModService.GetInstanceInstalledMods(instancePath);
+    
+    /// <summary>
+    /// Convenience overload that gets installed mods by branch and version.
+    /// </summary>
+    public List<InstalledMod> GetInstanceInstalledMods(string branch, int version)
+    {
+        var instancePath = GetInstancePath(branch, version);
+        return ModService.GetInstanceInstalledMods(instancePath);
+    }
+    
+    /// <summary>
+    /// Opens the instance folder in the file manager.
+    /// </summary>
+    public bool OpenInstanceFolder(string branch, int version)
+    {
+        try
+        {
+            var instancePath = GetInstancePath(branch, version);
+            if (!Directory.Exists(instancePath))
+            {
+                Logger.Warning("Files", $"Instance folder does not exist: {instancePath}");
+                return false;
+            }
+            
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start("explorer.exe", $"\"{instancePath}\"");
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                Process.Start(new ProcessStartInfo("open", $"\"{instancePath}\"") { UseShellExecute = false });
+            }
+            else
+            {
+                Process.Start("xdg-open", $"\"{instancePath}\"");
+            }
+            
+            Logger.Success("Files", $"Opened instance folder: {instancePath}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Files", $"Failed to open instance folder: {ex.Message}");
+            return false;
+        }
+    }
+
     // CurseForge API constants
     private const string CurseForgeBaseUrl = "https://api.curseforge.com/v1";
     private const int HytaleGameId = 70216; // Hytale game ID on CurseForge
@@ -6450,1886 +6374,13 @@ rm -f ""$0""
 
     // Mod Manager with CurseForge API
     public async Task<ModSearchResult> SearchModsAsync(string query, int page, int pageSize, string[] categories, int sortField, int sortOrder)
-    {
-        try
-        {
-            var url = $"{CurseForgeBaseUrl}/mods/search?gameId={HytaleGameId}";
-            
-            if (!string.IsNullOrEmpty(query))
-            {
-                url += $"&searchFilter={Uri.EscapeDataString(query)}";
-            }
-            
-            if (pageSize > 0)
-            {
-                url += $"&pageSize={pageSize}";
-            }
-            
-            if (page > 0)
-            {
-                url += $"&index={page * pageSize}";
-            }
-            
-            // Sort field: 1=Featured, 2=Popularity, 3=LastUpdated, 4=Name, 5=Author, 6=TotalDownloads
-            if (sortField > 0)
-            {
-                url += $"&sortField={sortField}";
-            }
-            
-            // Sort order: asc or desc
-            if (sortOrder > 0)
-            {
-                url += $"&sortOrder={(sortOrder == 1 ? "asc" : "desc")}";
-            }
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("x-api-key", CurseForgeApiKey);
-            
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var json = await response.Content.ReadAsStringAsync();
-            var cfResponse = JsonSerializer.Deserialize<CurseForgeSearchResponse>(json, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            });
-            
-            if (cfResponse?.Data == null)
-            {
-                return new ModSearchResult { Mods = new List<ModInfo>(), TotalCount = 0 };
-            }
-            
-            var mods = cfResponse.Data.Select(m => new ModInfo
-            {
-                Id = m.Id.ToString(),
-                Name = m.Name ?? "",
-                Slug = m.Slug ?? "",
-                Summary = m.Summary ?? "",
-                Description = m.Summary ?? "",
-                Author = m.Authors?.FirstOrDefault()?.Name ?? "Unknown",
-                DownloadCount = m.DownloadCount,
-                IconUrl = m.Logo?.ThumbnailUrl ?? "",
-                DateUpdated = m.DateModified ?? "",
-                Categories = m.Categories?.Select(c => c.Name ?? "").ToList() ?? new List<string>(),
-                LatestFileId = m.LatestFiles?.FirstOrDefault()?.Id.ToString() ?? "",
-                Screenshots = m.Screenshots ?? new List<CurseForgeScreenshot>()
-            }).ToList();
-            
-            return new ModSearchResult 
-            { 
-                Mods = mods, 
-                TotalCount = cfResponse.Pagination?.TotalCount ?? mods.Count 
-            };
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Search failed: {ex.Message}");
-            return new ModSearchResult { Mods = new List<ModInfo>(), TotalCount = 0 };
-        }
-    }
-
-    private async Task<CurseForgeMod?> GetCurseForgeModAsync(string modId)
-    {
-        try
-        {
-            var url = $"{CurseForgeBaseUrl}/mods/{modId}";
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("x-api-key", CurseForgeApiKey);
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync();
-            var cfResponse = JsonSerializer.Deserialize<CurseForgeModResponse>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            return cfResponse?.Data;
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Mods", $"Failed to fetch mod metadata for {modId}: {ex.Message}");
-            return null;
-        }
-    }
+        => await _modService.SearchModsAsync(query, page, pageSize, categories, sortField, sortOrder);
 
     public async Task<ModFilesResult> GetModFilesAsync(string modId, int page, int pageSize)
-    {
-        try
-        {
-            var url = $"{CurseForgeBaseUrl}/mods/{modId}/files";
-            if (pageSize > 0)
-            {
-                url += $"?pageSize={pageSize}";
-                if (page > 0)
-                {
-                    url += $"&index={page * pageSize}";
-                }
-            }
-            
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("x-api-key", CurseForgeApiKey);
-            
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var json = await response.Content.ReadAsStringAsync();
-            var cfResponse = JsonSerializer.Deserialize<CurseForgeFilesResponse>(json, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            });
-            
-            if (cfResponse?.Data == null)
-            {
-                return new ModFilesResult { Files = new List<ModFileInfo>(), TotalCount = 0 };
-            }
-            
-            var files = cfResponse.Data.Select(f => new ModFileInfo
-            {
-                Id = f.Id.ToString(),
-                ModId = f.ModId.ToString(),
-                DisplayName = f.DisplayName ?? "",
-                FileName = f.FileName ?? "",
-                FileLength = f.FileLength,
-                DownloadUrl = f.DownloadUrl ?? "",
-                FileDate = f.FileDate ?? "",
-                ReleaseType = f.ReleaseType
-            }).ToList();
-            
-            return new ModFilesResult 
-            { 
-                Files = files, 
-                TotalCount = cfResponse.Pagination?.TotalCount ?? files.Count 
-            };
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to get mod files: {ex.Message}");
-            return new ModFilesResult { Files = new List<ModFileInfo>(), TotalCount = 0 };
-        }
-    }
-
-    private string GetModsPath(string versionPath)
-    {
-        var userDataPath = Path.Combine(versionPath, "UserData");
-        var preferredPath = Path.Combine(userDataPath, "Mods");
-        var legacyPath = Path.Combine(userDataPath, "mods");
-
-        if (Directory.Exists(preferredPath))
-        {
-            return preferredPath;
-        }
-
-        if (Directory.Exists(legacyPath))
-        {
-            try
-            {
-                Directory.Move(legacyPath, preferredPath);
-                return preferredPath;
-            }
-            catch
-            {
-                return legacyPath;
-            }
-        }
-
-        Directory.CreateDirectory(preferredPath);
-        return preferredPath;
-    }
-
-    // Photino bridge calls non-Async names; provide thin wrapper
-    public Task<bool> InstallModFileToInstance(string modId, string fileId, string branch, int version)
-    {
-        return InstallModFileToInstanceAsync(modId, fileId, branch, version);
-    }
-    
-    /// <summary>
-    /// Installs a mod file from base64 content (used for drag-and-drop from browser).
-    /// </summary>
-    public async Task<bool> InstallModFromBase64(string fileName, string base64Content, string branch, int version)
-    {
-        try
-        {
-            Logger.Info("Mods", $"Installing mod from base64: {fileName}, content length: {base64Content?.Length ?? 0}");
-            
-            if (string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(base64Content))
-            {
-                Logger.Error("Mods", "Invalid file name or content");
-                return false;
-            }
-            
-            // Decode base64 content
-            byte[] fileBytes;
-            try
-            {
-                // The content should be pure base64 (no data URL prefix)
-                fileBytes = Convert.FromBase64String(base64Content);
-                Logger.Success("Mods", $"Decoded base64 content: {fileBytes.Length} bytes");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Mods", $"Failed to decode base64 content: {ex.Message}");
-                return false;
-            }
-            
-            // Get the target instance path and create mods directory
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            
-            var existingPath = FindExistingInstancePath(resolvedBranch, version);
-            string versionPath;
-            
-            if (!string.IsNullOrWhiteSpace(existingPath) && Directory.Exists(existingPath))
-            {
-                versionPath = existingPath;
-            }
-            else
-            {
-                versionPath = GetInstancePath(resolvedBranch, version);
-                Logger.Info("Mods", $"Instance not found, creating mod directory at: {versionPath}");
-            }
-            
-            string modsPath = GetModsPath(versionPath);
-            var destPath = Path.Combine(modsPath, fileName);
-            
-            // Write the file
-            await File.WriteAllBytesAsync(destPath, fileBytes);
-            Logger.Success("Mods", $"Saved mod from drag-drop: {fileName} ({fileBytes.Length} bytes)");
-            
-            // Generate a local ID based on filename
-            var localId = $"local-{Path.GetFileNameWithoutExtension(fileName)}";
-            var modName = Path.GetFileNameWithoutExtension(fileName);
-            
-            // Try to extract version from filename
-            var versionMatch = System.Text.RegularExpressions.Regex.Match(modName, @"[-_]v?(\d+(?:\.\d+)*(?:-\w+)?)\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            string modVersion = versionMatch.Success ? versionMatch.Groups[1].Value : "1.0";
-            
-            if (versionMatch.Success)
-            {
-                modName = modName.Substring(0, versionMatch.Index).TrimEnd('-', '_', ' ');
-            }
-            
-            modName = modName.Replace('_', ' ').Replace('-', ' ');
-            
-            var newMod = new InstalledMod
-            {
-                Id = localId,
-                Name = modName,
-                FileName = fileName,
-                Enabled = true,
-                Version = modVersion,
-                Author = "",
-                Description = ""
-            };
-            
-            // Try to look up mod info on CurseForge using fingerprint
-            try
-            {
-                Logger.Info("Mods", $"Looking up mod metadata on CurseForge for: {fileName}");
-                var cfInfo = await LookupModOnCurseForgeAsync(destPath);
-                if (cfInfo != null)
-                {
-                    Logger.Success("Mods", $"Found CurseForge match for {fileName}: {cfInfo.Name}");
-                    Logger.Info("Mods", $"  - Mod ID: {cfInfo.ModId}, File ID: {cfInfo.FileId}");
-                    Logger.Info("Mods", $"  - Author: {cfInfo.Author}, Version: {cfInfo.Version}");
-                    newMod.CurseForgeId = cfInfo.ModId;
-                    newMod.FileId = cfInfo.FileId;
-                    newMod.Name = cfInfo.Name ?? modName;
-                    newMod.Version = cfInfo.Version ?? modVersion;
-                    newMod.Author = cfInfo.Author ?? "";
-                    newMod.Description = cfInfo.Description ?? "";
-                    newMod.IconUrl = cfInfo.IconUrl ?? "";
-                    newMod.Id = cfInfo.ModId;
-                }
-                else
-                {
-                    Logger.Warning("Mods", $"No CurseForge match found for {fileName} - using local metadata");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning("Mods", $"Could not look up mod on CurseForge: {ex.Message}");
-            }
-            
-            // Update manifest
-            await _modManifestLock.WaitAsync();
-            try
-            {
-                var manifestPath = Path.Combine(modsPath, "manifest.json");
-                var installedMods = new List<InstalledMod>();
-                
-                if (File.Exists(manifestPath))
-                {
-                    try
-                    {
-                        var manifestJson = File.ReadAllText(manifestPath);
-                        installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-                    }
-                    catch { }
-                }
-                
-                installedMods.RemoveAll(m => m.Id == localId || m.FileName == fileName || (newMod.CurseForgeId != null && m.CurseForgeId == newMod.CurseForgeId));
-                installedMods.Add(newMod);
-                
-                var manifestOptions = new JsonSerializerOptions(JsonOptions) { WriteIndented = true };
-                File.WriteAllText(manifestPath, JsonSerializer.Serialize(installedMods, manifestOptions));
-            }
-            finally
-            {
-                _modManifestLock.Release();
-            }
-            
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to install mod from base64: {ex.Message}");
-            return false;
-        }
-    }
-    
-    /// <summary>
-    /// Installs a local mod file (JAR) to the specified instance by copying it to the mods folder.
-    /// Also attempts to look up mod info on CurseForge using fingerprinting.
-    /// Creates the mods directory if the instance doesn't exist yet.
-    /// </summary>
-    public async Task<bool> InstallLocalModFile(string sourcePath, string branch, int version)
-    {
-        try
-        {
-            if (!File.Exists(sourcePath))
-            {
-                Logger.Error("Mods", $"Source file not found: {sourcePath}");
-                return false;
-            }
-            
-            var fileName = Path.GetFileName(sourcePath);
-            
-            // Get the target instance path and create mods directory
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            
-            // Try to find existing instance, or use default path
-            var existingPath = FindExistingInstancePath(resolvedBranch, version);
-            string versionPath;
-            
-            if (!string.IsNullOrWhiteSpace(existingPath) && Directory.Exists(existingPath))
-            {
-                versionPath = existingPath;
-            }
-            else
-            {
-                // Instance doesn't exist yet - use the default path and create the directory
-                versionPath = GetInstancePath(resolvedBranch, version);
-                Logger.Info("Mods", $"Instance not found, creating mod directory at: {versionPath}");
-            }
-            
-            string modsPath = GetModsPath(versionPath);
-            
-            var destPath = Path.Combine(modsPath, fileName);
-            
-            // Copy the file
-            File.Copy(sourcePath, destPath, overwrite: true);
-            Logger.Success("Mods", $"Copied local mod: {fileName}");
-            
-            // Generate a local ID based on filename
-            var localId = $"local-{Path.GetFileNameWithoutExtension(fileName)}";
-            var modName = Path.GetFileNameWithoutExtension(fileName);
-            
-            // Try to extract version from filename (common patterns: ModName-1.0.0, ModName_v1.2)
-            var versionMatch = System.Text.RegularExpressions.Regex.Match(modName, @"[-_]v?(\d+(?:\.\d+)*(?:-\w+)?)\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            string modVersion = versionMatch.Success ? versionMatch.Groups[1].Value : "1.0";
-            
-            // Clean up the mod name (remove version suffix if found)
-            if (versionMatch.Success)
-            {
-                modName = modName.Substring(0, versionMatch.Index).TrimEnd('-', '_', ' ');
-            }
-            
-            // Replace underscores/hyphens with spaces for display
-            modName = modName.Replace('_', ' ').Replace('-', ' ');
-            
-            // Create new mod entry
-            var newMod = new InstalledMod
-            {
-                Id = localId,
-                Name = modName,
-                FileName = fileName,
-                Enabled = true,
-                Version = modVersion,
-                Author = "",
-                Description = ""
-            };
-            
-            // Try to look up mod info on CurseForge using fingerprint
-            try
-            {
-                Logger.Info("Mods", $"Looking up mod metadata on CurseForge for: {fileName}");
-                var cfInfo = await LookupModOnCurseForgeAsync(destPath);
-                if (cfInfo != null)
-                {
-                    Logger.Success("Mods", $"Found CurseForge match for {fileName}: {cfInfo.Name}");
-                    Logger.Info("Mods", $"  - Mod ID: {cfInfo.ModId}, File ID: {cfInfo.FileId}");
-                    Logger.Info("Mods", $"  - Author: {cfInfo.Author}, Version: {cfInfo.Version}");
-                    newMod.CurseForgeId = cfInfo.ModId;
-                    newMod.FileId = cfInfo.FileId;
-                    newMod.Name = cfInfo.Name ?? modName;
-                    newMod.Version = cfInfo.Version ?? modVersion;
-                    newMod.Author = cfInfo.Author ?? "";
-                    newMod.Description = cfInfo.Description ?? "";
-                    newMod.IconUrl = cfInfo.IconUrl ?? "";
-                    newMod.Id = cfInfo.ModId; // Use CurseForge ID instead of local ID
-                }
-                else
-                {
-                    Logger.Warning("Mods", $"No CurseForge match found for {fileName} - using local metadata");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning("Mods", $"Could not look up mod on CurseForge: {ex.Message}");
-            }
-            
-            // Update manifest with lock to prevent concurrent write issues
-            await _modManifestLock.WaitAsync();
-            try
-            {
-                var manifestPath = Path.Combine(modsPath, "manifest.json");
-                var installedMods = new List<InstalledMod>();
-                
-                if (File.Exists(manifestPath))
-                {
-                    try
-                    {
-                        var manifestJson = File.ReadAllText(manifestPath);
-                        installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-                    }
-                    catch { }
-                }
-                
-                // Remove existing entry if updating
-                installedMods.RemoveAll(m => m.Id == localId || m.FileName == fileName || (newMod.CurseForgeId != null && m.CurseForgeId == newMod.CurseForgeId));
-                
-                installedMods.Add(newMod);
-                
-                var manifestOptions = new JsonSerializerOptions(JsonOptions) { WriteIndented = true };
-                File.WriteAllText(manifestPath, JsonSerializer.Serialize(installedMods, manifestOptions));
-            }
-            finally
-            {
-                _modManifestLock.Release();
-            }
-            
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to install local mod: {ex.Message}");
-            return false;
-        }
-    }
-    
-    /// <summary>
-    /// CurseForge mod info from fingerprint lookup
-    /// </summary>
-    private class CurseForgeModInfo
-    {
-        public string ModId { get; set; } = "";
-        public string FileId { get; set; } = "";
-        public string? Name { get; set; }
-        public string? Version { get; set; }
-        public string? Author { get; set; }
-        public string? Description { get; set; }
-        public string? IconUrl { get; set; }
-    }
-    
-    /// <summary>
-    /// Computes the CurseForge fingerprint (MurmurHash2) for a file.
-    /// CurseForge uses a normalized version of the file (whitespace removed for certain file types).
-    /// </summary>
-    private static uint ComputeCurseForgeFingerprint(string filePath)
-    {
-        var bytes = File.ReadAllBytes(filePath);
-        
-        // CurseForge removes whitespace from the file for fingerprinting
-        // Filter out whitespace bytes (0x09, 0x0A, 0x0D, 0x20)
-        var filtered = bytes.Where(b => b != 0x09 && b != 0x0A && b != 0x0D && b != 0x20).ToArray();
-        
-        return MurmurHash2(filtered, 1);
-    }
-    
-    /// <summary>
-    /// MurmurHash2 implementation matching CurseForge's fingerprinting.
-    /// </summary>
-    private static uint MurmurHash2(byte[] data, uint seed)
-    {
-        const uint m = 0x5bd1e995;
-        const int r = 24;
-        
-        uint h = seed ^ (uint)data.Length;
-        int len = data.Length;
-        int i = 0;
-        
-        while (len >= 4)
-        {
-            uint k = BitConverter.ToUInt32(data, i);
-            k *= m;
-            k ^= k >> r;
-            k *= m;
-            h *= m;
-            h ^= k;
-            i += 4;
-            len -= 4;
-        }
-        
-        switch (len)
-        {
-            case 3: h ^= (uint)data[i + 2] << 16; goto case 2;
-            case 2: h ^= (uint)data[i + 1] << 8; goto case 1;
-            case 1: h ^= data[i]; h *= m; break;
-        }
-        
-        h ^= h >> 13;
-        h *= m;
-        h ^= h >> 15;
-        
-        return h;
-    }
-    
-    /// <summary>
-    /// Looks up a mod file on CurseForge using its fingerprint.
-    /// </summary>
-    private async Task<CurseForgeModInfo?> LookupModOnCurseForgeAsync(string filePath)
-    {
-        try
-        {
-            var fingerprint = ComputeCurseForgeFingerprint(filePath);
-            Logger.Info("Mods", $"Looking up file with fingerprint: {fingerprint}");
-            
-            // Call CurseForge fingerprint API
-            var requestBody = new { fingerprints = new[] { fingerprint } };
-            var requestJson = JsonSerializer.Serialize(requestBody);
-            
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.curseforge.com/v1/fingerprints");
-            request.Headers.Add("x-api-key", "$2a$10$1W4EvLWzLe4.RM1kcxW9n.vxmBPEYcg9dvpT4r5OAlkQk/.6jQE4e");
-            request.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
-            
-            using var response = await HttpClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode)
-            {
-                Logger.Warning("Mods", $"CurseForge fingerprint lookup failed: {response.StatusCode}");
-                return null;
-            }
-            
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            
-            var data = doc.RootElement.GetProperty("data");
-            var exactMatches = data.GetProperty("exactMatches");
-            
-            if (exactMatches.GetArrayLength() == 0)
-            {
-                Logger.Info("Mods", "No exact fingerprint match found on CurseForge");
-                return null;
-            }
-            
-            var match = exactMatches[0];
-            var file = match.GetProperty("file");
-            var modId = file.GetProperty("modId").GetInt32();
-            var fileId = file.GetProperty("id").GetInt32();
-            var displayName = file.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
-            
-            // Get mod details for more info
-            var modUrl = $"https://api.curseforge.com/v1/mods/{modId}";
-            using var modRequest = new HttpRequestMessage(HttpMethod.Get, modUrl);
-            modRequest.Headers.Add("x-api-key", "$2a$10$1W4EvLWzLe4.RM1kcxW9n.vxmBPEYcg9dvpT4r5OAlkQk/.6jQE4e");
-            
-            using var modResponse = await HttpClient.SendAsync(modRequest);
-            if (!modResponse.IsSuccessStatusCode)
-            {
-                // Return basic info if mod details fail
-                return new CurseForgeModInfo
-                {
-                    ModId = modId.ToString(),
-                    FileId = fileId.ToString(),
-                    Version = displayName
-                };
-            }
-            
-            var modJson = await modResponse.Content.ReadAsStringAsync();
-            var modData = JsonSerializer.Deserialize<CurseForgeModResponse>(modJson, JsonOptions);
-            var mod = modData?.Data;
-            
-            return new CurseForgeModInfo
-            {
-                ModId = modId.ToString(),
-                FileId = fileId.ToString(),
-                Name = mod?.Name,
-                Version = displayName,
-                Author = mod?.Authors?.FirstOrDefault()?.Name,
-                Description = mod?.Summary,
-                IconUrl = mod?.Logo?.ThumbnailUrl
-            };
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Mods", $"CurseForge lookup error: {ex.Message}");
-            return null;
-        }
-    }
-    
-    /// <summary>
-    /// Exports the mod list for an instance as a JSON file.
-    /// Returns the path to the exported file.
-    /// </summary>
-    public string? ExportModList(string branch, int version)
-    {
-        try
-        {
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            string modsPath = GetModsPath(versionPath);
-            var manifestPath = Path.Combine(modsPath, "manifest.json");
-            
-            if (!File.Exists(manifestPath))
-            {
-                Logger.Warning("Mods", "No manifest found to export");
-                return null;
-            }
-            
-            var manifestJson = File.ReadAllText(manifestPath);
-            var installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-            
-            // Create export data with only CurseForge mods that can be re-downloaded
-            var exportData = installedMods
-                .Where(m => !string.IsNullOrEmpty(m.CurseForgeId) && !string.IsNullOrEmpty(m.FileId))
-                .Select(m => new
-                {
-                    curseForgeId = m.CurseForgeId,
-                    fileId = m.FileId,
-                    name = m.Name,
-                    version = m.Version
-                })
-                .ToList();
-            
-            if (exportData.Count == 0)
-            {
-                Logger.Warning("Mods", "No CurseForge mods to export");
-                return null;
-            }
-            
-            // Save to Downloads folder
-            var downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            var exportFileName = $"HyPrism-ModList-{DateTime.Now:yyyyMMdd-HHmmss}.json";
-            var exportPath = Path.Combine(downloadsPath, exportFileName);
-            
-            var exportOptions = new JsonSerializerOptions { WriteIndented = true };
-            File.WriteAllText(exportPath, JsonSerializer.Serialize(exportData, exportOptions));
-            
-            Logger.Success("Mods", $"Exported {exportData.Count} mods to {exportPath}");
-            return exportPath;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to export mod list: {ex.Message}");
-            return null;
-        }
-    }
-    
-    /// <summary>
-    /// Gets the last export path or Desktop as default.
-    /// </summary>
-    public string GetLastExportPath()
-    {
-        if (!string.IsNullOrWhiteSpace(_config.LastExportPath) && Directory.Exists(_config.LastExportPath))
-        {
-            return _config.LastExportPath;
-        }
-        return Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-    }
-    
-    /// <summary>
-    /// Exports mods to a specified directory with the given export type.
-    /// ExportType: "modlist" for JSON file, "zip" for ZIP archive of all mod files.
-    /// Returns the path to the exported file or null on failure.
-    /// </summary>
-    public Task<string?> ExportModsToFolder(string branch, int version, string targetFolder, string exportType)
-    {
-        try
-        {
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            string modsPath = GetModsPath(versionPath);
-            var manifestPath = Path.Combine(modsPath, "manifest.json");
-            
-            // Save the export path for next time
-            _config.LastExportPath = targetFolder;
-            SaveConfig();
-            
-            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            
-            if (exportType == "zip")
-            {
-                // Export as ZIP file containing all mod files
-                var modFiles = Directory.Exists(modsPath) 
-                    ? Directory.GetFiles(modsPath).Where(f => !f.EndsWith(".json")).ToArray()
-                    : Array.Empty<string>();
-                
-                if (modFiles.Length == 0)
-                {
-                    Logger.Warning("Mods", "No mod files to export as ZIP");
-                    return Task.FromResult<string?>(null);
-                }
-                
-                var zipFileName = $"HyPrism-Mods-{timestamp}.zip";
-                var zipPath = Path.Combine(targetFolder, zipFileName);
-                
-                // Create ZIP archive
-                using (var archive = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
-                {
-                    foreach (var modFile in modFiles)
-                    {
-                        archive.CreateEntryFromFile(modFile, Path.GetFileName(modFile));
-                    }
-                    
-                    // Also include manifest.json if it exists
-                    if (File.Exists(manifestPath))
-                    {
-                        archive.CreateEntryFromFile(manifestPath, "manifest.json");
-                    }
-                }
-                
-                Logger.Success("Mods", $"Exported {modFiles.Length} mod files to {zipPath}");
-                return Task.FromResult<string?>(zipPath);
-            }
-            else
-            {
-                // Export as JSON modlist (default)
-                if (!File.Exists(manifestPath))
-                {
-                    Logger.Warning("Mods", "No manifest found to export");
-                    return Task.FromResult<string?>(null);
-                }
-                
-                var manifestJson = File.ReadAllText(manifestPath);
-                var installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-                
-                // Create export data with only CurseForge mods that can be re-downloaded
-                var exportData = installedMods
-                    .Where(m => !string.IsNullOrEmpty(m.CurseForgeId) && !string.IsNullOrEmpty(m.FileId))
-                    .Select(m => new
-                    {
-                        curseForgeId = m.CurseForgeId,
-                        fileId = m.FileId,
-                        name = m.Name,
-                        version = m.Version
-                    })
-                    .ToList();
-                
-                if (exportData.Count == 0)
-                {
-                    Logger.Warning("Mods", "No CurseForge mods to export as modlist");
-                    return Task.FromResult<string?>(null);
-                }
-                
-                var exportFileName = $"HyPrism-ModList-{timestamp}.json";
-                var exportPath = Path.Combine(targetFolder, exportFileName);
-                
-                var exportOptions = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(exportPath, JsonSerializer.Serialize(exportData, exportOptions));
-                
-                Logger.Success("Mods", $"Exported {exportData.Count} mods to {exportPath}");
-                return Task.FromResult<string?>(exportPath);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to export mods: {ex.Message}");
-            return Task.FromResult<string?>(null);
-        }
-    }
-    
-    /// <summary>
-    /// Imports and downloads mods from a mod list JSON file.
-    /// Returns the number of mods successfully imported.
-    /// </summary>
-    public async Task<int> ImportModList(string modListPath, string branch, int version)
-    {
-        try
-        {
-            if (!File.Exists(modListPath))
-            {
-                Logger.Error("Mods", $"Mod list file not found: {modListPath}");
-                return 0;
-            }
-            
-            var json = File.ReadAllText(modListPath);
-            var modList = JsonSerializer.Deserialize<List<ModListEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            
-            if (modList == null || modList.Count == 0)
-            {
-                Logger.Warning("Mods", "No mods found in import file");
-                return 0;
-            }
-            
-            int successCount = 0;
-            foreach (var mod in modList)
-            {
-                if (string.IsNullOrEmpty(mod.CurseForgeId) || string.IsNullOrEmpty(mod.FileId))
-                {
-                    Logger.Warning("Mods", $"Skipping mod with missing IDs: {mod.Name ?? "Unknown"}");
-                    continue;
-                }
-                
-                try
-                {
-                    var success = await InstallModFileToInstanceAsync(mod.CurseForgeId, mod.FileId, branch, version);
-                    if (success)
-                    {
-                        successCount++;
-                        Logger.Success("Mods", $"Imported: {mod.Name ?? mod.CurseForgeId}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warning("Mods", $"Failed to import {mod.Name ?? mod.CurseForgeId}: {ex.Message}");
-                }
-            }
-            
-            Logger.Success("Mods", $"Imported {successCount}/{modList.Count} mods");
-            return successCount;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to import mod list: {ex.Message}");
-            return 0;
-        }
-    }
-
-    public Task<string?> BrowseFolder(string? initialPath = null)
-    {
-        return BrowseFolderAsync(initialPath);
-    }
+        => await _modService.GetModFilesAsync(modId, page, pageSize);
 
     public async Task<List<ModCategory>> GetModCategoriesAsync()
-    {
-        try
-        {
-            var url = $"{CurseForgeBaseUrl}/categories?gameId={HytaleGameId}";
-            
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("x-api-key", CurseForgeApiKey);
-            
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var json = await response.Content.ReadAsStringAsync();
-            var cfResponse = JsonSerializer.Deserialize<CurseForgeCategoriesResponse>(json, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            });
-            
-            if (cfResponse?.Data == null)
-            {
-                return new List<ModCategory>();
-            }
-            
-            // Filter only root categories (classId == 0 or parentCategoryId == 0)
-            return cfResponse.Data
-                .Where(c => c.ParentCategoryId == 0 || c.IsClass == true)
-                .Select(c => new ModCategory
-                {
-                    Id = c.Id,
-                    Name = c.Name ?? ""
-                })
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to get categories: {ex.Message}");
-            return new List<ModCategory>();
-        }
-    }
-
-    public List<InstalledMod> GetInstanceInstalledMods(string branch, int version)
-    {
-        var result = new List<InstalledMod>();
-
-        // Get current version's mods folder in UserData
-        string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-        string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-        if (!Directory.Exists(versionPath)) return result;
-        
-        string modsPath = GetModsPath(versionPath);
-        
-        if (!Directory.Exists(modsPath)) return result;
-        
-        // First, load mods from manifest
-        var manifestMods = new Dictionary<string, InstalledMod>(StringComparer.OrdinalIgnoreCase);
-        string manifestPath = Path.Combine(modsPath, "manifest.json");
-        
-        if (File.Exists(manifestPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(manifestPath);
-                var mods = JsonSerializer.Deserialize<List<InstalledMod>>(json, JsonOptions) ?? new List<InstalledMod>();
-                foreach (var mod in mods)
-                {
-                    // Normalize IDs and ensure CurseForgeId and screenshots are populated
-                    if (!string.IsNullOrEmpty(mod.CurseForgeId) && !mod.Id.StartsWith("cf-", StringComparison.OrdinalIgnoreCase))
-                    {
-                        mod.Id = $"cf-{mod.CurseForgeId}";
-                    }
-                    else if (string.IsNullOrEmpty(mod.CurseForgeId) && mod.Id.StartsWith("cf-", StringComparison.OrdinalIgnoreCase))
-                    {
-                        mod.CurseForgeId = mod.Id.Replace("cf-", "");
-                    }
-                    mod.Screenshots ??= new List<CurseForgeScreenshot>();
-                    
-                    // Track by filename for merging with JAR scan
-                    if (!string.IsNullOrEmpty(mod.FileName))
-                    {
-                        manifestMods[mod.FileName] = mod;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning("Mods", $"Failed to read manifest: {ex.Message}");
-            }
-        }
-        
-        // Scan for mod files in the mods folder (supports .jar, .zip, .hmod, .litemod, .disabled)
-        var modExtensions = new[] { "*.jar", "*.zip", "*.hmod", "*.litemod", "*.disabled" };
-        var modFiles = modExtensions
-            .SelectMany(ext => Directory.GetFiles(modsPath, ext, SearchOption.TopDirectoryOnly))
-            .Distinct()
-            .ToArray();
-        var foundMods = new List<InstalledMod>();
-        var needsManifestUpdate = false;
-        
-        foreach (var modPath in modFiles)
-        {
-            var fileName = Path.GetFileName(modPath);
-            
-            // Check if this mod file is already in manifest
-            if (manifestMods.TryGetValue(fileName, out var existingMod))
-            {
-                foundMods.Add(existingMod);
-            }
-            else
-            {
-                // Mod file exists but not in manifest - add it as a local mod
-                Logger.Info("Mods", $"Found untracked mod: {fileName}");
-                var localMod = new InstalledMod
-                {
-                    Id = $"local-{Path.GetFileNameWithoutExtension(fileName)}",
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    FileName = fileName,
-                    Enabled = true,
-                    Version = "Local",
-                    Author = "Local",
-                    Description = "Manually installed mod file"
-                };
-                foundMods.Add(localMod);
-                manifestMods[fileName] = localMod;
-                needsManifestUpdate = true;
-            }
-        }
-        
-        // Update manifest if we found untracked mods
-        if (needsManifestUpdate)
-        {
-            try
-            {
-                var manifestOptions = new JsonSerializerOptions(JsonOptions) { WriteIndented = true };
-                File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestMods.Values.ToList(), manifestOptions));
-                Logger.Info("Mods", "Updated manifest with untracked mods");
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning("Mods", $"Failed to update manifest: {ex.Message}");
-            }
-        }
-        
-        return foundMods;
-    }
-
-    public async Task<bool> InstallModFileToInstanceAsync(string modId, string fileId, string branch, int version)
-    {
-        try
-        {
-            // Get the target instance path and create mods directory inside UserData
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            string modsPath = GetModsPath(versionPath);
-            
-            Logger.Info("Mods", $"Installing mod to: {modsPath}");
-            
-            // Get file info from CurseForge
-            var url = $"{CurseForgeBaseUrl}/mods/{modId}/files/{fileId}";
-            
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("x-api-key", CurseForgeApiKey);
-            
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var json = await response.Content.ReadAsStringAsync();
-            var cfResponse = JsonSerializer.Deserialize<CurseForgeFileResponse>(json, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            });
-            
-            if (cfResponse?.Data == null || string.IsNullOrEmpty(cfResponse.Data.DownloadUrl))
-            {
-                Logger.Error("Mods", "Could not get download URL for mod file");
-                return false;
-            }
-            
-            var fileInfo = cfResponse.Data;
-            var fileName = fileInfo.FileName ?? $"mod_{modId}_{fileId}.jar";
-            var filePath = Path.Combine(modsPath, fileName);
-
-            // Fetch mod metadata to enrich manifest (icon, description, author)
-            var modMeta = await GetCurseForgeModAsync(modId);
-            string modName = modMeta?.Name ?? fileInfo.DisplayName ?? fileName;
-            string modAuthor = modMeta?.Authors?.FirstOrDefault()?.Name ?? "Unknown";
-            string modDescription = modMeta?.Summary ?? "";
-            string iconUrl = modMeta?.Logo?.ThumbnailUrl ?? modMeta?.Logo?.Url ?? "";
-            string modSlug = modMeta?.Slug ?? "";
-            var screenshots = modMeta?.Screenshots ?? new List<CurseForgeScreenshot>();
-            
-            // Download the file
-            Logger.Info("Mods", $"Downloading {fileName}...");
-            using var downloadResponse = await HttpClient.GetAsync(fileInfo.DownloadUrl);
-            downloadResponse.EnsureSuccessStatusCode();
-            
-            using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await downloadResponse.Content.CopyToAsync(fs);
-            
-            Logger.Success("Mods", $"Installed {fileName}");
-            
-            // Update manifest - use lock to prevent concurrent writes from corrupting data
-            await _modManifestLock.WaitAsync();
-            try
-            {
-                var manifestPath = Path.Combine(modsPath, "manifest.json");
-                var installedMods = new List<InstalledMod>();
-                
-                if (File.Exists(manifestPath))
-                {
-                    try
-                    {
-                        var manifestJson = File.ReadAllText(manifestPath);
-                        installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-                    }
-                    catch { }
-                }
-                
-                // Find and delete old version file if updating/downgrading
-                var existingMod = installedMods.FirstOrDefault(m => m.Id == $"cf-{modId}" || m.CurseForgeId == modId);
-                if (existingMod != null && !string.IsNullOrEmpty(existingMod.FileName) && existingMod.FileName != fileName)
-                {
-                    var oldFilePath = Path.Combine(modsPath, existingMod.FileName);
-                    if (File.Exists(oldFilePath))
-                    {
-                        try
-                        {
-                            File.Delete(oldFilePath);
-                            Logger.Info("Mods", $"Deleted old version: {existingMod.FileName}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Warning("Mods", $"Failed to delete old mod file: {ex.Message}");
-                        }
-                    }
-                }
-                
-                // Remove existing entry for this mod if updating
-                installedMods.RemoveAll(m => m.Id == $"cf-{modId}" || m.CurseForgeId == modId);
-                
-                // Add new entry
-                installedMods.Add(new InstalledMod
-                {
-                    Id = $"cf-{modId}",
-                    CurseForgeId = modId,
-                    FileId = fileId,
-                    Name = modName,
-                    FileName = fileName,
-                    Slug = modSlug,
-                    Enabled = true,
-                    Version = fileInfo.DisplayName ?? fileInfo.FileName ?? fileId,
-                    Author = modAuthor,
-                    Description = modDescription,
-                    IconUrl = iconUrl,
-                    FileDate = fileInfo.FileDate ?? "",
-                    Screenshots = screenshots
-                });
-                
-                var manifestOptions = new JsonSerializerOptions(JsonOptions) { WriteIndented = true };
-                File.WriteAllText(manifestPath, JsonSerializer.Serialize(installedMods, manifestOptions));
-            }
-            finally
-            {
-                _modManifestLock.Release();
-            }
-            
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to install mod: {ex.Message}");
-            return false;
-        }
-    }
-
-    public bool UninstallInstanceMod(string modId, string branch, int version)
-    {
-        try
-        {
-            // Get current version's mods folder in UserData
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            if (!Directory.Exists(versionPath)) return false;
-            
-            string modsPath = GetModsPath(versionPath);
-            var manifestPath = Path.Combine(modsPath, "manifest.json");
-            
-            if (!File.Exists(manifestPath))
-            {
-                return false;
-            }
-            
-            var manifestJson = File.ReadAllText(manifestPath);
-            var installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-            
-            // Find the mod to uninstall
-            var modToRemove = installedMods.FirstOrDefault(m => m.Id == modId || m.CurseForgeId == modId || m.Id == $"cf-{modId}");
-            if (modToRemove == null)
-            {
-                return false;
-            }
-            
-            // Delete the mod file
-            if (!string.IsNullOrEmpty(modToRemove.FileName))
-            {
-                var filePath = Path.Combine(modsPath, modToRemove.FileName);
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
-            
-            // Remove from manifest
-            installedMods.RemoveAll(m => m.Id == modId);
-            var manifestOptions = new JsonSerializerOptions(JsonOptions) { WriteIndented = true };
-            File.WriteAllText(manifestPath, JsonSerializer.Serialize(installedMods, manifestOptions));
-            
-            Logger.Success("Mods", $"Uninstalled mod: {modToRemove.Name}");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to uninstall mod: {ex.Message}");
-            return false;
-        }
-    }
-
-    public bool OpenInstanceModsFolder(string branch, int version)
-    {
-        try
-        {
-            // Get current version's mods folder in UserData
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            if (!Directory.Exists(versionPath)) Directory.CreateDirectory(versionPath);
-            
-            string modsPath = GetModsPath(versionPath);
-            
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Process.Start("explorer.exe", $"\"{modsPath}\"");
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                Process.Start(new ProcessStartInfo("open", $"\"{modsPath}\"") { UseShellExecute = false });
-            }
-            else
-            {
-                Process.Start("xdg-open", $"\"{modsPath}\"");
-            }
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public bool OpenInstanceFolder(string branch, int version)
-    {
-        try
-        {
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            Directory.CreateDirectory(versionPath);
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Process.Start("explorer.exe", $"\"{versionPath}\"");
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                Process.Start(new ProcessStartInfo("open", $"\"{versionPath}\"") { UseShellExecute = false });
-            }
-            else
-            {
-                Process.Start("xdg-open", $"\"{versionPath}\"");
-            }
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-    
-    /// <summary>
-    /// Exports an instance (UserData folder) as a ZIP file to the Downloads folder.
-    /// Returns the path to the exported file.
-    /// </summary>
-    public string? ExportInstance(string branch, int version)
-    {
-        try
-        {
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            string versionPath = ResolveInstancePath(resolvedBranch, version, preferExisting: true);
-            string userDataPath = Path.Combine(versionPath, "UserData");
-            
-            if (!Directory.Exists(userDataPath))
-            {
-                Logger.Warning("Instance", "No UserData folder to export");
-                return null;
-            }
-            
-            // Create export filename
-            var versionLabel = version == 0 ? "latest" : $"v{version}";
-            var exportFileName = $"HyPrism-{resolvedBranch}-{versionLabel}-{DateTime.Now:yyyyMMdd-HHmmss}.zip";
-            var downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            var exportPath = Path.Combine(downloadsPath, exportFileName);
-            
-            // Create ZIP file
-            Logger.Info("Instance", $"Exporting instance to: {exportPath}");
-            
-            if (File.Exists(exportPath))
-            {
-                File.Delete(exportPath);
-            }
-            
-            System.IO.Compression.ZipFile.CreateFromDirectory(userDataPath, exportPath, System.IO.Compression.CompressionLevel.Optimal, includeBaseDirectory: true);
-            
-            Logger.Success("Instance", $"Exported instance: {exportFileName}");
-            return exportPath;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Instance", $"Failed to export instance: {ex.Message}");
-            return null;
-        }
-    }
-    
-    /// <summary>
-    /// Gets detailed information about all installed instances.
-    /// </summary>
-    public List<InstalledVersionInfo> GetInstalledVersionsDetailed()
-    {
-        var result = new List<InstalledVersionInfo>();
-        
-        foreach (var branchName in new[] { "release", "pre-release" })
-        {
-            var versions = GetInstalledVersionsForBranch(branchName);
-            foreach (var version in versions)
-            {
-                try
-                {
-                    var versionPath = ResolveInstancePath(branchName, version, preferExisting: true);
-                    var userDataPath = Path.Combine(versionPath, "UserData");
-                    
-                    long size = 0;
-                    if (Directory.Exists(userDataPath))
-                    {
-                        size = GetDirectorySize(userDataPath);
-                    }
-                    
-                    result.Add(new InstalledVersionInfo
-                    {
-                        Version = version,
-                        Branch = branchName,
-                        Path = versionPath,
-                        UserDataSize = size,
-                        HasUserData = Directory.Exists(userDataPath)
-                    });
-                }
-                catch { }
-            }
-        }
-        
-        return result.OrderByDescending(v => v.Version).ToList();
-    }
-    
-    private long GetDirectorySize(string path)
-    {
-        long size = 0;
-        try
-        {
-            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try
-                {
-                    size += new FileInfo(file).Length;
-                }
-                catch { }
-            }
-        }
-        catch { }
-        return size;
-    }
-
-    public async Task<List<InstalledMod>> CheckInstanceModUpdatesAsync(string branch, int version)
-    {
-        var modsWithUpdates = new List<InstalledMod>();
-        
-        try
-        {
-            string resolvedBranch = string.IsNullOrWhiteSpace(branch) ? _config.VersionType : branch;
-            var existingPath = FindExistingInstancePath(resolvedBranch, version);
-            if (string.IsNullOrWhiteSpace(existingPath) || !Directory.Exists(existingPath))
-            {
-                Logger.Warning("Mods", $"Instance not found for update check: {resolvedBranch} v{version}");
-                return modsWithUpdates;
-            }
-            
-            string versionPath = existingPath;
-            string modsPath = GetModsPath(versionPath);
-            var manifestPath = Path.Combine(modsPath, "manifest.json");
-            
-            if (!File.Exists(manifestPath))
-            {
-                Logger.Info("Mods", "No manifest found for update check");
-                return modsWithUpdates;
-            }
-            
-            var manifestJson = File.ReadAllText(manifestPath);
-            var installedMods = JsonSerializer.Deserialize<List<InstalledMod>>(manifestJson, JsonOptions) ?? new List<InstalledMod>();
-            
-            // Filter to only CurseForge mods
-            var curseForgemods = installedMods.Where(m => !string.IsNullOrEmpty(m.CurseForgeId) && !string.IsNullOrEmpty(m.FileId)).ToList();
-            
-            if (curseForgemods.Count == 0)
-            {
-                Logger.Info("Mods", "No CurseForge mods found for update check");
-                return modsWithUpdates;
-            }
-            
-            Logger.Info("Mods", $"Checking updates for {curseForgemods.Count} CurseForge mods");
-            
-            foreach (var mod in curseForgemods)
-            {
-                try
-                {
-                    // Get mod details from CurseForge to find latest file
-                    var url = $"https://api.curseforge.com/v1/mods/{mod.CurseForgeId}";
-                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    request.Headers.Add("x-api-key", "$2a$10$1W4EvLWzLe4.RM1kcxW9n.vxmBPEYcg9dvpT4r5OAlkQk/.6jQE4e");
-                    
-                    using var response = await HttpClient.SendAsync(request);
-                    if (!response.IsSuccessStatusCode) continue;
-                    
-                    var json = await response.Content.ReadAsStringAsync();
-                    var modResponse = JsonSerializer.Deserialize<CurseForgeModResponse>(json, JsonOptions);
-                    var modData = modResponse?.Data;
-                    
-                    if (modData?.LatestFiles == null || modData.LatestFiles.Count == 0) continue;
-                    
-                    // Find the latest file (highest file ID or most recent)
-                    var latestFile = modData.LatestFiles
-                        .OrderByDescending(f => f.FileDate)
-                        .ThenByDescending(f => f.Id)
-                        .FirstOrDefault();
-                    
-                    if (latestFile == null) continue;
-                    
-                    // Compare file IDs - if different, there's an update (or downgrade)
-                    if (latestFile.Id.ToString() != mod.FileId)
-                    {
-                        // Check if it's actually newer (higher file ID = newer usually, but also check date)
-                        if (int.TryParse(mod.FileId, out int currentFileId) && latestFile.Id > currentFileId)
-                        {
-                            Logger.Info("Mods", $"Update available for {mod.Name}: {mod.FileId} -> {latestFile.Id}");
-                            
-                            // Return an InstalledMod with the update info set
-                            var modWithUpdate = new InstalledMod
-                            {
-                                Id = mod.Id,
-                                Name = mod.Name,
-                                Slug = mod.Slug,
-                                Version = mod.Version,
-                                FileId = mod.FileId,
-                                FileName = mod.FileName,
-                                Enabled = mod.Enabled,
-                                Author = mod.Author,
-                                Description = mod.Description,
-                                IconUrl = mod.IconUrl,
-                                CurseForgeId = mod.CurseForgeId,
-                                FileDate = mod.FileDate,
-                                Screenshots = mod.Screenshots,
-                                LatestFileId = latestFile.Id.ToString(),
-                                LatestVersion = latestFile.DisplayName ?? latestFile.FileName ?? "",
-                            };
-                            modsWithUpdates.Add(modWithUpdate);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warning("Mods", $"Failed to check update for {mod.Name}: {ex.Message}");
-                }
-            }
-            
-            Logger.Info("Mods", $"Found {modsWithUpdates.Count} mods with updates available");
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Mods", $"Failed to check for mod updates: {ex.Message}");
-        }
-        
-        return modsWithUpdates;
-    }
-
-    public Task<List<InstalledMod>> CheckInstanceModUpdates(string branch, int version)
-    {
-        return CheckInstanceModUpdatesAsync(branch, version);
-    }
-
-    // Discord Announcements - loaded from .env file
-    private static string DiscordAnnouncementChannelId = "";
-    private static string DiscordBotToken = "";
-
-    private static void LoadEnvFile()
-    {
-        // Try to find .env in current directory or parent directories
-        var currentDir = Directory.GetCurrentDirectory();
-        var envPath = Path.Combine(currentDir, ".env");
-        
-        // Also check the executable directory
-        var exeDir = AppContext.BaseDirectory;
-        var exeEnvPath = Path.Combine(exeDir, ".env");
-        
-        var pathToUse = File.Exists(envPath) ? envPath : (File.Exists(exeEnvPath) ? exeEnvPath : null);
-        
-        if (pathToUse == null)
-        {
-            Logger.Info("Discord", ".env file not found - Discord announcements will be disabled");
-            return;
-        }
-        
-        try
-        {
-            var lines = File.ReadAllLines(pathToUse);
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#"))
-                    continue;
-                    
-                var eqIndex = line.IndexOf('=');
-                if (eqIndex <= 0) continue;
-                
-                var key = line.Substring(0, eqIndex).Trim();
-                var value = line.Substring(eqIndex + 1).Trim();
-                
-                // Remove quotes if present
-                if (value.StartsWith("\"") && value.EndsWith("\""))
-                    value = value.Substring(1, value.Length - 2);
-                else if (value.StartsWith("'") && value.EndsWith("'"))
-                    value = value.Substring(1, value.Length - 2);
-                
-                switch (key)
-                {
-                    case "DISCORD_BOT_TOKEN":
-                        DiscordBotToken = value;
-                        Logger.Info("Discord", "Loaded bot token from .env");
-                        break;
-                    case "DISCORD_CHANNEL_ID":
-                        DiscordAnnouncementChannelId = value;
-                        Logger.Info("Discord", $"Loaded channel ID from .env: {value}");
-                        break;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Discord", $"Failed to load .env file: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Fetches the latest announcement from a Discord channel.
-    /// Returns null if no announcement found, if Discord API is not configured,
-    /// if announcements are disabled, or if the message has been dismissed.
-    /// </summary>
-    public async Task<DiscordAnnouncement?> GetDiscordAnnouncementAsync()
-    {
-        // Check if announcements are enabled
-        if (!_config.ShowDiscordAnnouncements)
-        {
-            Logger.Info("Discord", "Discord announcements disabled in settings");
-            return null;
-        }
-
-        if (string.IsNullOrEmpty(DiscordBotToken) || string.IsNullOrEmpty(DiscordAnnouncementChannelId))
-        {
-            Logger.Info("Discord", "Discord announcements not configured - skipping");
-            return null;
-        }
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, 
-                $"https://discord.com/api/v10/channels/{DiscordAnnouncementChannelId}/messages?limit=1");
-            request.Headers.Add("Authorization", $"Bot {DiscordBotToken}");
-            request.Headers.Add("User-Agent", "HyPrism/2.0.3");
-
-            using var response = await HttpClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode)
-            {
-                Logger.Warning("Discord", $"Failed to fetch announcements: {response.StatusCode}");
-                return null;
-            }
-
-            var content = await response.Content.ReadAsStringAsync();
-            var messages = JsonSerializer.Deserialize<List<DiscordMessage>>(content);
-
-            if (messages == null || messages.Count == 0)
-            {
-                return null;
-            }
-
-            var msg = messages[0];
-            
-            // Check if this announcement has been dismissed
-            if (msg.Id != null && _config.DismissedAnnouncementIds.Contains(msg.Id))
-            {
-                Logger.Info("Discord", $"Announcement {msg.Id} already dismissed - skipping");
-                return null;
-            }
-
-            // Check if the message has a ❌ reaction from us (means it should be hidden)
-            // This is checked via the message reactions
-            if (msg.Reactions != null)
-            {
-                foreach (var reaction in msg.Reactions)
-                {
-                    if (reaction.Emoji?.Name == "❌" && reaction.Me == true)
-                    {
-                        Logger.Info("Discord", $"Announcement {msg.Id} has ❌ reaction - skipping");
-                        return null;
-                    }
-                }
-            }
-            
-            // Extract image if present (from attachments or embeds)
-            string? imageUrl = null;
-            if (msg.Attachments?.Count > 0)
-            {
-                var imgAttachment = msg.Attachments.FirstOrDefault(a => 
-                    a.ContentType?.StartsWith("image/") == true);
-                imageUrl = imgAttachment?.Url;
-            }
-            
-            // Get author's highest role color if available
-            string? roleColor = null;
-            string? roleName = null;
-            if (msg.Member?.Roles?.Count > 0)
-            {
-                // We'd need to fetch roles from guild, for now just use first role ID
-                // In practice, you might want to cache guild roles
-            }
-
-            return new DiscordAnnouncement
-            {
-                Id = msg.Id ?? "",
-                Content = msg.Content ?? "",
-                AuthorName = msg.Author?.GlobalName ?? msg.Author?.Username ?? "Unknown",
-                AuthorAvatar = msg.Author?.Id != null && msg.Author?.Avatar != null
-                    ? $"https://cdn.discordapp.com/avatars/{msg.Author.Id}/{msg.Author.Avatar}.png?size=64"
-                    : null,
-                AuthorRole = roleName,
-                RoleColor = roleColor,
-                ImageUrl = imageUrl,
-                Timestamp = msg.Timestamp ?? DateTime.UtcNow.ToString("o")
-            };
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Discord", $"Error fetching announcement: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// React to a Discord message with the specified emoji.
-    /// Used to mark announcements as shown (✅) or hidden (❌) in Discord.
-    /// </summary>
-    public async Task<bool> ReactToAnnouncementAsync(string messageId, string emoji)
-    {
-        if (string.IsNullOrEmpty(DiscordBotToken) || string.IsNullOrEmpty(DiscordAnnouncementChannelId))
-        {
-            return false;
-        }
-
-        try
-        {
-            // URL encode the emoji for the API
-            var encodedEmoji = Uri.EscapeDataString(emoji);
-            var url = $"https://discord.com/api/v10/channels/{DiscordAnnouncementChannelId}/messages/{messageId}/reactions/{encodedEmoji}/@me";
-            
-            using var request = new HttpRequestMessage(HttpMethod.Put, url);
-            request.Headers.Add("Authorization", $"Bot {DiscordBotToken}");
-            request.Headers.Add("User-Agent", "HyPrism/2.0.3");
-
-            using var response = await HttpClient.SendAsync(request);
-            if (response.IsSuccessStatusCode)
-            {
-                Logger.Info("Discord", $"Added {emoji} reaction to message {messageId}");
-                return true;
-            }
-            else
-            {
-                Logger.Warning("Discord", $"Failed to add reaction: {response.StatusCode}");
-                return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Discord", $"Error adding reaction: {ex.Message}");
-            return false;
-        }
-    }
-
-    public Task<DiscordAnnouncement?> GetDiscordAnnouncement()
-    {
-        return GetDiscordAnnouncementAsync();
-    }
-
-    /// <summary>
-    /// Opens the HyPrism launcher data folder in the system file manager.
-    /// </summary>
-    public bool OpenLauncherFolder()
-    {
-        try
-        {
-            Logger.Info("Folder", $"Opening launcher folder: {_appDir}");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Process.Start("explorer.exe", $"\"{_appDir}\"");
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                Process.Start(new ProcessStartInfo("open", $"\"{_appDir}\"") { UseShellExecute = false });
-            }
-            else
-            {
-                Process.Start("xdg-open", $"\"{_appDir}\"");
-            }
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Folder", $"Failed to open launcher folder: {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Deletes all HyPrism launcher data including config, cache, and instances.
-    /// Returns true if successful, false otherwise.
-    /// </summary>
-    public bool DeleteLauncherData()
-    {
-        try
-        {
-            Logger.Warning("Folder", $"Deleting all launcher data at: {_appDir}");
-            
-            // Don't delete if app is running from within the folder
-            if (_appDir.Contains(AppContext.BaseDirectory))
-            {
-                Logger.Warning("Folder", "Cannot delete launcher data - app is running from within the folder");
-                return false;
-            }
-            
-            if (Directory.Exists(_appDir))
-            {
-                Directory.Delete(_appDir, true);
-                Logger.Info("Folder", "Launcher data deleted successfully");
-                return true;
-            }
-            
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Folder", $"Failed to delete launcher data: {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Gets the current launcher folder path.
-    /// </summary>
-    public string GetLauncherFolderPath()
-    {
-        return _appDir;
-    }
-
-    /// <summary>
-    /// Browse for a folder using native OS dialog.
-    /// Returns the selected folder path or null if cancelled.
-    /// </summary>
-    public async Task<string?> BrowseFolderAsync(string? initialPath = null)
-    {
-        try
-        {
-            var startPath = initialPath ?? _appDir;
-            
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                // Use osascript with stdin to avoid shell quoting issues
-                var script = $@"tell application ""Finder""
-                    activate
-                    set theFolder to choose folder with prompt ""Select Folder"" default location (POSIX file ""{startPath.Replace("\"", "\\\"")}"" as alias)
-                    return POSIX path of theFolder
-                end tell";
-                
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "osascript",
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                
-                using var process = Process.Start(psi);
-                if (process == null) return null;
-                
-                // Write script to stdin to avoid shell escaping issues
-                await process.StandardInput.WriteAsync(script);
-                process.StandardInput.Close();
-                
-                var output = await process.StandardOutput.ReadToEndAsync();
-                var error = await process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                
-                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
-                {
-                    return output.Trim();
-                }
-                
-                // User cancelled or error - try simpler approach without default location
-                if (!string.IsNullOrEmpty(error) && error.Contains("-128"))
-                {
-                    // User cancelled
-                    return null;
-                }
-                
-                // Fallback: try without default location
-                var fallbackScript = @"tell application ""Finder""
-                    activate
-                    set theFolder to choose folder with prompt ""Select Folder""
-                    return POSIX path of theFolder
-                end tell";
-                
-                var fallbackPsi = new ProcessStartInfo
-                {
-                    FileName = "osascript",
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                
-                using var fallbackProcess = Process.Start(fallbackPsi);
-                if (fallbackProcess == null) return null;
-                
-                await fallbackProcess.StandardInput.WriteAsync(fallbackScript);
-                fallbackProcess.StandardInput.Close();
-                
-                var fallbackOutput = await fallbackProcess.StandardOutput.ReadToEndAsync();
-                await fallbackProcess.WaitForExitAsync();
-                
-                if (fallbackProcess.ExitCode == 0 && !string.IsNullOrWhiteSpace(fallbackOutput))
-                {
-                    return fallbackOutput.Trim();
-                }
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                // Use PowerShell to show folder picker on Windows
-                var script = $@"Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.SelectedPath = '{startPath.Replace("'", "''")}'; if ($dialog.ShowDialog() -eq 'OK') {{ $dialog.SelectedPath }}";
-                
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "powershell",
-                    Arguments = $"-NoProfile -Command \"{script}\"",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                
-                using var process = Process.Start(psi);
-                if (process == null) return null;
-                
-                var output = await process.StandardOutput.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                
-                if (!string.IsNullOrWhiteSpace(output))
-                {
-                    return output.Trim();
-                }
-            }
-            else
-            {
-                // Linux - use zenity if available
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "zenity",
-                    Arguments = $"--file-selection --directory --title=\"Select Folder\"",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                
-                using var process = Process.Start(psi);
-                if (process == null) return null;
-                
-                var output = await process.StandardOutput.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                
-                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
-                {
-                    return output.Trim();
-                }
-            }
-            
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Folder", $"Failed to browse folder: {ex.Message}");
-            return null;
-        }
-    }
+        => await _modService.GetModCategoriesAsync();
 
     /// <summary>
     /// Browse for mod files using native OS dialog.
@@ -8661,500 +6712,4 @@ rm -f ""$0""
         
         return languages;
     }
-}
-
-// Models
-
-// Discord API models
-public class DiscordMessage
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-    
-    [JsonPropertyName("content")]
-    public string? Content { get; set; }
-    
-    [JsonPropertyName("author")]
-    public DiscordAuthor? Author { get; set; }
-    
-    [JsonPropertyName("member")]
-    public DiscordMember? Member { get; set; }
-    
-    [JsonPropertyName("attachments")]
-    public List<DiscordAttachment>? Attachments { get; set; }
-    
-    [JsonPropertyName("timestamp")]
-    public string? Timestamp { get; set; }
-    
-    [JsonPropertyName("reactions")]
-    public List<DiscordReaction>? Reactions { get; set; }
-}
-
-public class DiscordReaction
-{
-    [JsonPropertyName("count")]
-    public int Count { get; set; }
-    
-    [JsonPropertyName("me")]
-    public bool Me { get; set; }
-    
-    [JsonPropertyName("emoji")]
-    public DiscordEmoji? Emoji { get; set; }
-}
-
-public class DiscordEmoji
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-    
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-}
-
-public class DiscordAuthor
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-    
-    [JsonPropertyName("username")]
-    public string? Username { get; set; }
-    
-    [JsonPropertyName("global_name")]
-    public string? GlobalName { get; set; }
-    
-    [JsonPropertyName("avatar")]
-    public string? Avatar { get; set; }
-}
-
-public class DiscordMember
-{
-    [JsonPropertyName("roles")]
-    public List<string>? Roles { get; set; }
-    
-    [JsonPropertyName("nick")]
-    public string? Nick { get; set; }
-}
-
-public class DiscordAttachment
-{
-    [JsonPropertyName("url")]
-    public string? Url { get; set; }
-    
-    [JsonPropertyName("content_type")]
-    public string? ContentType { get; set; }
-}
-
-/// <summary>
-/// Announcement data fetched from Discord channel.
-/// </summary>
-public class DiscordAnnouncement
-{
-    public string Id { get; set; } = "";
-    public string Content { get; set; } = "";
-    public string AuthorName { get; set; } = "";
-    public string? AuthorAvatar { get; set; }
-    public string? AuthorRole { get; set; }
-    public string? RoleColor { get; set; }
-    public string? ImageUrl { get; set; }
-    public string Timestamp { get; set; } = "";
-}
-
-/// <summary>
-/// Status of Rosetta 2 installation on macOS Apple Silicon.
-/// </summary>
-public class RosettaStatus
-{
-    public bool NeedsInstall { get; set; }
-    public string Message { get; set; } = "";
-    public string Command { get; set; } = "";
-    public string? TutorialUrl { get; set; }
-}
-
-public class Config
-{
-    public string Version { get; set; } = "2.0.0";
-    public string UUID { get; set; } = "";
-    public string Nick { get; set; } = "Hyprism";
-    public string VersionType { get; set; } = "release";
-    public int SelectedVersion { get; set; } = 0;
-    public string InstanceDirectory { get; set; } = "";
-    public bool MusicEnabled { get; set; } = true;
-    /// <summary>
-    /// Launcher update channel: "release" for stable updates, "beta" for beta updates.
-    /// Beta releases are named like "beta3-3.0.0" on GitHub.
-    /// </summary>
-    public string LauncherBranch { get; set; } = "release";
-    /// <summary>
-    /// If true, the launcher will close after successfully launching the game.
-    /// </summary>
-    public bool CloseAfterLaunch { get; set; } = false;
-    /// <summary>
-    /// If true, Discord announcements will be shown in the launcher.
-    /// </summary>
-    public bool ShowDiscordAnnouncements { get; set; } = true;
-    /// <summary>
-    /// List of Discord announcement IDs that have been dismissed by the user.
-    /// </summary>
-    public List<string> DismissedAnnouncementIds { get; set; } = new();
-    /// <summary>
-    /// If true, news will not be fetched or displayed.
-    /// </summary>
-    public bool DisableNews { get; set; } = false;
-    /// <summary>
-    /// Background mode: "slideshow" for rotating backgrounds, or a specific background filename.
-    /// </summary>
-    public string BackgroundMode { get; set; } = "slideshow";
-    /// <summary>
-    /// Custom launcher data directory. If set, overrides the default app data location.
-    /// </summary>
-    public string LauncherDataDirectory { get; set; } = "";
-    /// <summary>
-    /// Accent color for the UI (hex format, e.g., "#FFA845").
-    /// </summary>
-    public string AccentColor { get; set; } = "#FFA845";
-    /// <summary>
-    /// If true, game will run in online mode (requires authentication).
-    /// If false, game runs in offline mode.
-    /// </summary>
-    public bool OnlineMode { get; set; } = true;
-    /// <summary>
-    /// Auth server domain for online mode (e.g., "sessions.sanasol.ws").
-    /// </summary>
-    public string AuthDomain { get; set; } = "sessions.sanasol.ws";
-    /// <summary>
-    /// Last directory used for mod export. Defaults to Desktop.
-    /// </summary>
-    public string LastExportPath { get; set; } = "";
-    /// <summary>
-    /// List of saved profiles (UUID, name pairs).
-    /// </summary>
-    public List<Profile> Profiles { get; set; } = new();
-    /// <summary>
-    /// Index of the currently active profile. -1 means no profile selected (use UUID/Nick directly).
-    /// </summary>
-    public int ActiveProfileIndex { get; set; } = -1;
-    /// <summary>
-    /// Whether the user has completed the initial onboarding flow.
-    /// </summary>
-    public bool HasCompletedOnboarding { get; set; } = false;
-    /// <summary>
-    /// Username to UUID mappings. Each username gets a consistent UUID across sessions.
-    /// This ensures skins persist when changing usernames - switching back uses the same UUID.
-    /// Keys are case-insensitive for lookup but preserve original casing.
-    /// </summary>
-    public Dictionary<string, string> UserUuids { get; set; } = new();
-}
-
-/// <summary>
-/// A user profile with UUID and display name.
-/// </summary>
-public class Profile
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString();
-    public string UUID { get; set; } = "";
-    public string Name { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-/// <summary>
-/// Represents a username->UUID mapping for the frontend.
-/// </summary>
-public class UuidMapping
-{
-    public string Username { get; set; } = "";
-    public string Uuid { get; set; } = "";
-    public bool IsCurrent { get; set; } = false;
-}
-
-/// <summary>
-/// Cache for version information to avoid checking from version 1 every time.
-/// </summary>
-public class VersionCache
-{
-    public Dictionary<string, List<int>> KnownVersions { get; set; } = new();
-    public DateTime LastUpdated { get; set; } = DateTime.MinValue;
-}
-
-// News models matching Hytale API
-public class HytaleNewsItem
-{
-    [JsonPropertyName("title")]
-    public string? Title { get; set; }
-    
-    [JsonPropertyName("bodyExcerpt")]
-    public string? BodyExcerpt { get; set; }
-    
-    [JsonPropertyName("slug")]
-    public string? Slug { get; set; }
-    
-    [JsonPropertyName("publishedAt")]
-    public string? PublishedAt { get; set; }
-    
-    [JsonPropertyName("coverImage")]
-    public CoverImage? CoverImage { get; set; }
-    
-    [JsonPropertyName("author")]
-    public string? Author { get; set; }
-}
-
-public class CoverImage
-{
-    [JsonPropertyName("s3Key")]
-    public string? S3Key { get; set; }
-}
-
-// Response model for frontend
-public class NewsItemResponse
-{
-    [JsonPropertyName("title")]
-    public string Title { get; set; } = "";
-    
-    [JsonPropertyName("excerpt")]
-    public string Excerpt { get; set; } = "";
-    
-    [JsonPropertyName("url")]
-    public string Url { get; set; } = "";
-    
-    [JsonPropertyName("date")]
-    public string Date { get; set; } = "";
-
-    [JsonPropertyName("publishedAt")]
-    public string PublishedAt { get; set; } = "";
-    
-    [JsonPropertyName("author")]
-    public string Author { get; set; } = "";
-    
-    [JsonPropertyName("imageUrl")]
-    public string ImageUrl { get; set; } = "";
-}
-
-public class UpdateInfo
-{
-    public int OldVersion { get; set; }
-    public int NewVersion { get; set; }
-    public bool HasOldUserData { get; set; }
-    public string Branch { get; set; } = "";
-}
-
-public class DownloadProgress
-{
-    public bool Success { get; set; }
-    public int Progress { get; set; }
-    public string? Error { get; set; }
-}
-
-public class ModSearchResult
-{
-    public List<ModInfo> Mods { get; set; } = new();
-    public int TotalCount { get; set; }
-}
-
-public class ModInfo
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string Slug { get; set; } = "";
-    public string Summary { get; set; } = "";
-    public string Description { get; set; } = "";
-    public string Author { get; set; } = "";
-    public int DownloadCount { get; set; }
-    public string IconUrl { get; set; } = "";
-    public string ThumbnailUrl { get; set; } = "";
-    public List<string> Categories { get; set; } = new();
-    public string DateUpdated { get; set; } = "";
-    public string LatestFileId { get; set; } = "";
-    public List<CurseForgeScreenshot> Screenshots { get; set; } = new();
-}
-
-public class ModFilesResult
-{
-    public List<ModFileInfo> Files { get; set; } = new();
-    public int TotalCount { get; set; }
-}
-
-public class ModFileInfo
-{
-    public string Id { get; set; } = "";
-    public string ModId { get; set; } = "";
-    public string FileName { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public string DownloadUrl { get; set; } = "";
-    public long FileLength { get; set; }
-    public string FileDate { get; set; } = "";
-    public int ReleaseType { get; set; }
-    public List<string> GameVersions { get; set; } = new();
-    public int DownloadCount { get; set; }
-}
-
-public class ModCategory
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public string Slug { get; set; } = "";
-}
-
-public class InstalledMod
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string Slug { get; set; } = "";
-    public string Version { get; set; } = "";
-    public string FileId { get; set; } = "";
-    public string FileName { get; set; } = "";
-    public bool Enabled { get; set; } = true;
-    public string Author { get; set; } = "";
-    public string Description { get; set; } = "";
-    public string IconUrl { get; set; } = "";
-    public string CurseForgeId { get; set; } = "";
-    public string FileDate { get; set; } = "";
-    public List<CurseForgeScreenshot> Screenshots { get; set; } = new();
-    /// <summary>
-    /// The latest available file ID from CurseForge (for update checking).
-    /// </summary>
-    public string LatestFileId { get; set; } = "";
-    /// <summary>
-    /// The latest available version string from CurseForge (for update display).
-    /// </summary>
-    public string LatestVersion { get; set; } = "";
-}
-
-/// <summary>
-/// Entry for mod list import/export
-/// </summary>
-public class ModListEntry
-{
-    public string? CurseForgeId { get; set; }
-    public string? FileId { get; set; }
-    public string? Name { get; set; }
-    public string? Version { get; set; }
-}
-
-public class ModUpdate
-{
-    public string ModId { get; set; } = "";
-    public string CurrentFileId { get; set; } = "";
-    public string LatestFileId { get; set; } = "";
-    public string LatestFileName { get; set; } = "";
-}
-
-// CurseForge API response models
-public class CurseForgeSearchResponse
-{
-    public List<CurseForgeMod>? Data { get; set; }
-    public CurseForgePagination? Pagination { get; set; }
-}
-
-public class CurseForgeModResponse
-{
-    public CurseForgeMod? Data { get; set; }
-}
-
-public class CurseForgePagination
-{
-    public int Index { get; set; }
-    public int PageSize { get; set; }
-    public int ResultCount { get; set; }
-    public int TotalCount { get; set; }
-}
-
-public class CurseForgeMod
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-    public string? Slug { get; set; }
-    public string? Summary { get; set; }
-    public int DownloadCount { get; set; }
-    public string? DateCreated { get; set; }
-    public string? DateModified { get; set; }
-    public CurseForgeLogo? Logo { get; set; }
-    public List<CurseForgeCategory>? Categories { get; set; }
-    public List<CurseForgeAuthor>? Authors { get; set; }
-    public List<CurseForgeFile>? LatestFiles { get; set; }
-    public List<CurseForgeScreenshot>? Screenshots { get; set; }
-}
-
-public class CurseForgeScreenshot
-{
-    public int Id { get; set; }
-    public string? Title { get; set; }
-    public string? ThumbnailUrl { get; set; }
-    public string? Url { get; set; }
-}
-
-public class CurseForgeLogo
-{
-    public int Id { get; set; }
-    public string? ThumbnailUrl { get; set; }
-    public string? Url { get; set; }
-}
-
-public class CurseForgeCategory
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-    public string? Slug { get; set; }
-    public int ParentCategoryId { get; set; }
-    public bool? IsClass { get; set; }
-}
-
-public class CurseForgeAuthor
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-    public string? Url { get; set; }
-}
-
-public class CurseForgeFile
-{
-    public int Id { get; set; }
-    public int ModId { get; set; }
-    public string? DisplayName { get; set; }
-    public string? FileName { get; set; }
-    public string? DownloadUrl { get; set; }
-    public long FileLength { get; set; }
-    public string? FileDate { get; set; }
-    public int ReleaseType { get; set; }
-}
-
-public class CurseForgeCategoriesResponse
-{
-    public List<CurseForgeCategory>? Data { get; set; }
-}
-
-public class CurseForgeFilesResponse
-{
-    public List<CurseForgeFile>? Data { get; set; }
-    public CurseForgePagination? Pagination { get; set; }
-}
-
-public class CurseForgeFileResponse
-{
-    public CurseForgeFile? Data { get; set; }
-}
-
-/// <summary>
-/// Represents a cosmetic item from Assets.zip
-/// </summary>
-public class CosmeticItem
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-    
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-    
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-}
-
-/// <summary>
-/// Detailed information about an installed game instance.
-/// </summary>
-public class InstalledVersionInfo
-{
-    public int Version { get; set; }
-    public string Branch { get; set; } = "";
-    public string Path { get; set; } = "";
-    public long UserDataSize { get; set; }
-    public bool HasUserData { get; set; }
 }

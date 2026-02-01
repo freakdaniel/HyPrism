@@ -64,190 +64,305 @@
 
             <!-- Background -->
             <Image Source="/Assets/bg_1.jpg" Stretch="UniformToFill"/>
-        <Rectangle Fill="#CC090909"/> 
+            <Rectangle Fill="#CC090909"/> 
         
-        <!-- Main Layout -->
-        <Grid RowDefinitions="Auto, *, Auto" Margin="20" ColumnDefinitions="*, Auto">
-            
-            <!-- Header -->
-            <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" ColumnDefinitions="Auto, *, Auto">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <!-- Profile Picture Placeholder -->
-                    <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource HytaleOrangeBrush}" ClipToBounds="True">
-                         <TextBlock Text=":)" 
-                                    HorizontalAlignment="Center" VerticalAlignment="Center" 
-                                    FontWeight="Bold"/>
-                    </Border>
-                    <TextBlock Text="{Binding Nick}" VerticalAlignment="Center" FontSize="18" FontWeight="Bold" Foreground="White" Effect="drop-shadow(0 0 2 black)"/>
-                </StackPanel>
+            <!-- Main Layout Grid -->
+            <Grid Margin="30">
                 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                    <Button Command="{Binding ToggleSettingsCommand}" Background="Transparent" Padding="8" CornerRadius="8">
-                        <svg:Svg Path="/Assets/Icons/settings.svg" Width="24" Height="24"/>
-                    </Button>
-                </StackPanel>
-            </Grid>
-            
-            <!-- Central Content (Logo) -->
-            <Grid Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Image Source="/Assets/logo.png" Width="400" Height="150" Stretch="Uniform"/>
-            </Grid>
-            
-            <!-- News Panel -->
-            <Border Grid.Row="1" Grid.Column="1" 
-                    Width="350" 
-                    Margin="20,0,0,0"
-                    VerticalAlignment="Stretch"
-                    Background="#CC111111" 
-                    CornerRadius="12" 
-                    BorderBrush="#33FFFFFF" 
-                    BorderThickness="1"
-                    IsVisible="{Binding !AppService.Configuration.DisableNews}">
-                <Grid RowDefinitions="Auto, *">
-                    <!-- News Header -->
-                    <Border Grid.Row="0" Background="#111111" CornerRadius="12,12,0,0" Padding="15">
-                        <Grid ColumnDefinitions="*, Auto">
+                <!-- TOP LEFT: Profile -->
+                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Left" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <!-- Avatar -->
+                        <Border Width="48" Height="48" CornerRadius="24" 
+                                Background="{StaticResource HytaleOrangeBrush}" 
+                                ClipToBounds="True">
+                            <TextBlock Text=":)" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center" 
+                                       FontSize="20"
+                                       FontWeight="Bold"
+                                       Foreground="#111"/>
+                        </Border>
+                        
+                        <!-- Nick + Edit Button -->
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <svg:Svg Path="/Assets/Icons/info.svg" Width="18" Height="18"/>
-                                <TextBlock Text="News" FontSize="16" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Nick}" 
+                                           FontSize="20" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                                <Button Command="{Binding ToggleProfileEditorCommand}"
+                                        Background="Transparent" 
+                                        Padding="4" 
+                                        CornerRadius="4"
+                                        VerticalAlignment="Center">
+                                    <svg:Svg Path="/Assets/Icons/edit.svg" Width="14" Height="14"/>
+                                </Button>
                             </StackPanel>
-                            <Button Grid.Column="1" 
-                                    Command="{Binding RefreshNewsCommand}" 
-                                    Background="Transparent" 
-                                    Padding="6" 
-                                    CornerRadius="6">
-                                <svg:Svg Path="/Assets/Icons/refresh-cw.svg" Width="14" Height="14"/>
-                            </Button>
-                        </Grid>
-                    </Border>
+                        </StackPanel>
+                    </StackPanel>
                     
-                    <!-- News List -->
-                    <ScrollViewer Grid.Row="1">
-                        <ItemsControl ItemsSource="{Binding News}" Margin="10">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Command="{Binding $parent[Window].DataContext.OpenNewsLinkCommand}"
-                                            CommandParameter="{Binding Url}"
-                                            Background="Transparent"
-                                            Padding="0"
-                                            Margin="0,0,0,10"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Stretch">
-                                        <Border Background="#252525" 
-                                                CornerRadius="8" 
-                                                Padding="12"
-                                                BorderBrush="#333"
-                                                BorderThickness="1">
-                                            <Border.Styles>
-                                                <Style Selector="Border:pointerover">
-                                                    <Setter Property="Background" Value="#2a2a2a"/>
-                                                    <Setter Property="BorderBrush" Value="#444"/>
-                                                </Style>
-                                            </Border.Styles>
-                                            <StackPanel Spacing="6">
-                                                <TextBlock Text="{Binding Title}" 
-                                                           FontWeight="Bold" 
-                                                           Foreground="White" 
-                                                           FontSize="13"
-                                                           TextWrapping="Wrap"
-                                                           MaxLines="2"/>
-                                                <TextBlock Text="{Binding Excerpt}" 
-                                                           FontSize="11" 
-                                                           Foreground="#999"
-                                                           TextWrapping="Wrap"
-                                                           MaxLines="3"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <Grid ColumnDefinitions="Auto, *">
-                                                    <TextBlock Grid.Column="0" 
-                                                               Text="{Binding Date}" 
-                                                               FontSize="10" 
-                                                               Foreground="#666"/>
-                                                    <TextBlock Grid.Column="1" 
-                                                               Text="{Binding Author}" 
-                                                               FontSize="10" 
-                                                               Foreground="#666"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                            </StackPanel>
-                                        </Border>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
-            
-            <!-- Footer Controls -->
-            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Spacing="15" HorizontalAlignment="Center" Width="600">
-                
-                <!-- Status Info -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" IsVisible="{Binding IsDownloading}">
-                    <TextBlock Text="{Binding ProgressText}" Foreground="White"/>
-                    <TextBlock Text="{Binding DownloadSpeedText}" Foreground="Gray"/>
+                    <!-- Version -->
+                    <TextBlock Text="HyPrism 2.0.2" 
+                               FontSize="11" 
+                               Foreground="#999"
+                               Margin="4,0,0,0"/>
                 </StackPanel>
                 
-                <!-- Progress Bar -->
-                <ProgressBar Value="{Binding ProgressValue}" 
-                             Maximum="100" 
-                             Height="10" 
-                             IsVisible="{Binding IsDownloading}"
-                             Foreground="{StaticResource HytaleOrangeBrush}"
-                             Background="{StaticResource HytaleDarkLightBrush}"/>
-                
-                <!-- Action Buttons -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <Button Grid.Column="0" Command="{Binding LaunchCommand}" 
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                            Height="50" FontSize="18" FontWeight="Bold"
-                            Background="{StaticResource HytaleOrangeBrush}" Foreground="{StaticResource HytaleDarkBrush}"
-                            CornerRadius="8" BorderThickness="0">
-                        <Panel>
-                            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding !IsDownloading}" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <svg:Svg Path="/Assets/Icons/play.svg" Width="20" Height="20">
-                                    <svg:Svg.Css>* { stroke: #111 !important; fill: #111 !important; }</svg:Svg.Css>
-                                </svg:Svg>
-                                <TextBlock Text="PLAY" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <TextBlock Text="INSTALLING..." IsVisible="{Binding IsDownloading}"/>
-                        </Panel>
-                    </Button>
+                <!-- TOP RIGHT: Logo + Icons -->
+                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Right" Spacing="16">
+                    <!-- Hytale Logo -->
+                    <Image Source="/Assets/logo.png" 
+                           Width="180" 
+                           Height="70" 
+                           Stretch="Uniform"
+                           HorizontalAlignment="Right"/>
                     
-                    <ComboBox Grid.Column="2" 
-                              ItemsSource="{Binding Branches}" 
-                              SelectedItem="{Binding SelectedBranch}"
-                              VerticalAlignment="Stretch" Height="50" CornerRadius="8"
-                              Background="#333" Foreground="White" BorderThickness="0"
-                              Padding="15,0" VerticalContentAlignment="Center"/>
-                              
-                    <Button Grid.Column="4"
-                            Command="{Binding OpenFolderCommand}"
-                            VerticalAlignment="Stretch" Height="50" Width="50" CornerRadius="8"
-                            Background="#333" Padding="0"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                        <svg:Svg Path="/Assets/Icons/folder.svg" Width="24" Height="24"/>
-                    </Button>
-                            
-                    <Button Grid.Column="6"
-                            Command="{Binding ToggleModsCommand}"
-                            VerticalAlignment="Stretch" Height="50" Width="50" CornerRadius="8"
-                            Background="#333" Padding="0"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                    <!-- Action Icons -->
+                    <StackPanel Orientation="Horizontal" 
+                                Spacing="8" 
+                                HorizontalAlignment="Right">
+                        <!-- Discord -->
+                        <Button Background="#5865F2" 
+                                Padding="8" 
+                                CornerRadius="6"
+                                Width="36" Height="36">
+                            <svg:Svg Path="/Assets/Icons/discord.svg" Width="20" Height="20"/>
+                        </Button>
+                        
+                        <!-- GitHub -->
+                        <Button Background="#333" 
+                                Padding="8" 
+                                CornerRadius="6"
+                                Width="36" Height="36">
+                            <svg:Svg Path="/Assets/Icons/github.svg" Width="20" Height="20"/>
+                        </Button>
+                        
+                        <!-- Settings -->
+                        <Button Command="{Binding ToggleSettingsCommand}"
+                                Background="#333" 
+                                Padding="8" 
+                                CornerRadius="6"
+                                Width="36" Height="36">
+                            <svg:Svg Path="/Assets/Icons/settings.svg" Width="20" Height="20"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+                
+                <!-- RIGHT PANEL: News -->
+                <Border VerticalAlignment="Stretch" 
+                        HorizontalAlignment="Right"
+                        Width="350" 
+                        Margin="0,120,0,80"
+                        Background="#CC111111" 
+                        CornerRadius="12" 
+                        BorderBrush="#33FFFFFF" 
+                        BorderThickness="1"
+                        IsVisible="{Binding !AppService.Configuration.DisableNews}">
+                    <Grid RowDefinitions="Auto, *">
+                        <!-- News Header -->
+                        <Border Grid.Row="0" 
+                                Background="#1a1a1a" 
+                                CornerRadius="12,12,0,0" 
+                                Padding="16">
+                            <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+                                <svg:Svg Path="/Assets/Icons/info.svg" 
+                                         Width="18" 
+                                         Height="18"
+                                         VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" 
+                                           Text="News" 
+                                           FontSize="15" 
+                                           FontWeight="SemiBold" 
+                                           Foreground="White" 
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0"/>
+                                
+                                <!-- News Filter Tabs -->
+                                <StackPanel Grid.Column="2" 
+                                            Orientation="Horizontal" 
+                                            Spacing="6"
+                                            Margin="10,0">
+                                    <Button Content="All" 
+                                            Background="{StaticResource HytaleOrangeBrush}"
+                                            Foreground="#111"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"/>
+                                    <Button Content="Hytale" 
+                                            Background="Transparent"
+                                            Foreground="#999"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            FontSize="11"/>
+                                    <Button Content="HyPrism" 
+                                            Background="Transparent"
+                                            Foreground="#999"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            FontSize="11"/>
+                                </StackPanel>
+                                
+                                <!-- Scroll Up Button -->
+                                <Button Grid.Column="3" 
+                                        Background="Transparent" 
+                                        Padding="6" 
+                                        CornerRadius="6">
+                                    <svg:Svg Path="/Assets/Icons/chevron-up.svg" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- News List -->
+                        <ScrollViewer Grid.Row="1">
+                            <ItemsControl ItemsSource="{Binding News}" Margin="12">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding $parent[Window].DataContext.OpenNewsLinkCommand}"
+                                                CommandParameter="{Binding Url}"
+                                                Background="Transparent"
+                                                Padding="0"
+                                                Margin="0,0,0,10"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch">
+                                            <Border Background="#252525" 
+                                                    CornerRadius="8" 
+                                                    Padding="12"
+                                                    BorderBrush="#333"
+                                                    BorderThickness="1">
+                                                <Border.Styles>
+                                                    <Style Selector="Border:pointerover">
+                                                        <Setter Property="Background" Value="#2a2a2a"/>
+                                                        <Setter Property="BorderBrush" Value="#444"/>
+                                                    </Style>
+                                                </Border.Styles>
+                                                <StackPanel Spacing="6">
+                                                    <TextBlock Text="{Binding Title}" 
+                                                               FontWeight="SemiBold" 
+                                                               Foreground="White" 
+                                                               FontSize="13"
+                                                               TextWrapping="Wrap"
+                                                               MaxLines="2"/>
+                                                    <TextBlock Text="{Binding Excerpt}" 
+                                                               FontSize="11" 
+                                                               Foreground="#999"
+                                                               TextWrapping="Wrap"
+                                                               MaxLines="3"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <Grid ColumnDefinitions="Auto, *">
+                                                        <TextBlock Grid.Column="0" 
+                                                                   Text="{Binding Author}" 
+                                                                   FontSize="10" 
+                                                                   Foreground="#666"/>
+                                                        <TextBlock Grid.Column="1" 
+                                                                   Text="{Binding Date}" 
+                                                                   FontSize="10" 
+                                                                   Foreground="#666"
+                                                                   HorizontalAlignment="Right"/>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+                
+                <!-- BOTTOM LEFT: Action Buttons -->
+                <StackPanel VerticalAlignment="Bottom" 
+                            HorizontalAlignment="Left"
+                            Orientation="Horizontal" 
+                            Spacing="10">
+                    <!-- Mods -->
+                    <Button Command="{Binding ToggleModsCommand}"
+                            Background="#2a2a2a" 
+                            Padding="12" 
+                            CornerRadius="8"
+                            Width="50" Height="50">
                         <svg:Svg Path="/Assets/Icons/package.svg" Width="24" Height="24"/>
                     </Button>
-                </Grid>
-            </StackPanel>
-        </Grid>
+                    
+                    <!-- Folder -->
+                    <Button Command="{Binding OpenFolderCommand}"
+                            Background="#2a2a2a" 
+                            Padding="12" 
+                            CornerRadius="8"
+                            Width="50" Height="50">
+                        <svg:Svg Path="/Assets/Icons/folder.svg" Width="24" Height="24"/>
+                    </Button>
+                    
+                    <!-- Settings -->
+                    <Button Background="#2a2a2a" 
+                            Padding="12" 
+                            CornerRadius="8"
+                            Width="50" Height="50">
+                        <svg:Svg Path="/Assets/Icons/settings.svg" Width="24" Height="24"/>
+                    </Button>
+                    
+                    <!-- Network/WiFi -->
+                    <Button Background="#2a2a2a" 
+                            Padding="12" 
+                            CornerRadius="8"
+                            Width="50" Height="50">
+                        <svg:Svg Path="/Assets/Icons/wifi.svg" Width="24" Height="24"/>
+                    </Button>
+                </StackPanel>
+                
+                <!-- BOTTOM CENTER: Educational Text -->
+                <TextBlock VerticalAlignment="Bottom" 
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,8">
+                    <Run Text="Use with educational purposes only. Like it? " Foreground="#999" FontSize="12"/>
+                    <Run Text="BUY IT" Foreground="{StaticResource HytaleOrangeBrush}" FontSize="12" FontWeight="Bold"/>
+                </TextBlock>
+                
+                <!-- BOTTOM RIGHT: Version Selector + Play Button -->
+                <StackPanel VerticalAlignment="Bottom" 
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal"
+                            Spacing="12">
+                    <!-- Version Selector -->
+                    <Border Background="#2a2a2a"
+                            Padding="12,0"
+                            Height="50"
+                            CornerRadius="8">
+                        <StackPanel Orientation="Horizontal" 
+                                    Spacing="8"
+                                    VerticalAlignment="Center">
+                            <svg:Svg Path="/Assets/Icons/git-branch.svg" Width="18" Height="18"/>
+                            <TextBlock Text="Release" 
+                                       FontSize="14" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"/>
+                            <svg:Svg Path="/Assets/Icons/chevron-right.svg" Width="14" Height="14"/>
+                            <TextBlock Text="latest" 
+                                       FontSize="14" 
+                                       Foreground="#999"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <!-- Play Button -->
+                    <Button Command="{Binding LaunchCommand}" 
+                            Background="{StaticResource HytaleOrangeBrush}" 
+                            Foreground="#111"
+                            Padding="40,0"
+                            Height="50"
+                            CornerRadius="8"
+                            FontSize="18"
+                            FontWeight="Bold">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <svg:Svg Path="/Assets/Icons/play.svg" Width="20" Height="20">
+                                <svg:Svg.Css>* { stroke: #111 !important; fill: #111 !important; }</svg:Svg.Css>
+                            </svg:Svg>
+                            <TextBlock Text="PLAY" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- Global Overlay Layer -->
@@ -263,6 +378,11 @@
             <!-- Mods Overlay -->
             <Grid Classes="modal" Tag="{Binding IsModsOpen}">
                 <views:ModManagerView DataContext="{Binding ModManagerViewModel}" Width="1100" Height="750" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            </Grid>
+            
+            <!-- Profile Editor Overlay -->
+            <Grid Classes="modal" Tag="{Binding IsProfileEditorOpen}">
+                <views:ProfileEditorView DataContext="{Binding ProfileEditorViewModel}" Width="700" Height="600" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             </Grid>
         </Grid>
     </Grid>
