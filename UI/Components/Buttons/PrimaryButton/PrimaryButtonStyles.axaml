@@ -1,0 +1,50 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:btn="using:HyPrism.UI.Components.Buttons">
+    
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Spacing="10">
+                <btn:PrimaryButton Content="Primary Button" />
+                <btn:PrimaryButton Content="Disabled" IsEnabled="False" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- PrimaryButton Style -->
+    <Style Selector="btn|PrimaryButton">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentBrush}"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Padding" Value="24,12"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.1"/>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- PointerOver State -->
+    <Style Selector="btn|PrimaryButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentBrush}"/>
+        <Setter Property="Opacity" Value="0.9"/>
+        <Setter Property="RenderTransform" Value="scale(1.02)"/>
+    </Style>
+
+    <!-- Pressed State -->
+    <Style Selector="btn|PrimaryButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentBrush}"/>
+        <Setter Property="Opacity" Value="0.8"/>
+        <Setter Property="RenderTransform" Value="scale(0.98)"/>
+    </Style>
+
+    <!-- Disabled State -->
+    <Style Selector="btn|PrimaryButton:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#333"/>
+        <Setter Property="Foreground" Value="#666"/>
+    </Style>
+</Styles>

@@ -1,8 +1,8 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using HyPrism.Backend;
-using HyPrism.Backend.Services.Core;
+using HyPrism.Services;
+using HyPrism.Services.Core;
 using ReactiveUI;
 
 namespace HyPrism.UI.Services;

@@ -1,0 +1,711 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Threading.Tasks;
+using HyPrism.Models;
+using HyPrism.Services.Game;
+
+namespace HyPrism.Services.Core;
+
+/// <summary>
+/// Управляет обновлениями лаунчера HyPrism через GitHub Releases.
+/// Поддерживает каналы: release (стабильный) и beta (пре-релизы).
+/// </summary>
+public class UpdateService
+{
+    private const string GitHubApiUrl = "https://api.github.com/repos/yyyumeniku/HyPrism/releases";
+    private const string ReleasesPageUrl = "https://github.com/yyyumeniku/HyPrism/releases/latest";
+    private const string LauncherVersion = "2.0.3";
+    
+    private readonly HttpClient _httpClient;
+    private readonly Config _config;
+    private readonly VersionService _versionService;
+    private readonly Action<object>? _onUpdateAvailable;
+    private readonly Func<string, bool> _browserOpenUrl;
+    private readonly Func<string, string> _normalizeVersionType;
+    private readonly Func<string, LatestInstanceInfo?> _loadLatestInfo;
+    private readonly Action<string, int> _saveLatestInfo;
+    private readonly Func<string> _getLatestInstancePath;
+    private readonly Func<string, bool> _isClientPresent;
+    private readonly Func<string, int, bool, string> _resolveInstancePath;
+
+    public UpdateService(
+        HttpClient httpClient,
+        Config config,
+        VersionService versionService,
+        Action<object>? onUpdateAvailable,
+        Func<string, bool> browserOpenUrl,
+        Func<string, string> normalizeVersionType,
+        Func<string, LatestInstanceInfo?> loadLatestInfo,
+        Action<string, int> saveLatestInfo,
+        Func<string> getLatestInstancePath,
+        Func<string, bool> isClientPresent,
+        Func<string, int, bool, string> resolveInstancePath)
+    {
+        _httpClient = httpClient;
+        _config = config;
+        _versionService = versionService;
+        _onUpdateAvailable = onUpdateAvailable;
+        _browserOpenUrl = browserOpenUrl;
+        _normalizeVersionType = normalizeVersionType;
+        _loadLatestInfo = loadLatestInfo;
+        _saveLatestInfo = saveLatestInfo;
+        _getLatestInstancePath = getLatestInstancePath;
+        _isClientPresent = isClientPresent;
+        _resolveInstancePath = resolveInstancePath;
+    }
+
+    #region Public API
+
+    /// <summary>
+    /// Возвращает текущую версию лаунчера.
+    /// </summary>
+    public string GetLauncherVersion() => LauncherVersion;
+
+    /// <summary>
+    /// Возвращает текущий канал обновлений (release/beta).
+    /// </summary>
+    public string GetLauncherBranch() => 
+        string.IsNullOrWhiteSpace(_config.LauncherBranch) ? "release" : _config.LauncherBranch;
+
+    /// <summary>
+    /// Проверяет наличие обновлений лаунчера на GitHub.
+    /// При наличии вызывает событие LauncherUpdateAvailable.
+    /// </summary>
+    public async Task CheckForLauncherUpdatesAsync()
+    {
+        try
+        {
+            var launcherBranch = GetLauncherBranch();
+            var isBetaChannel = launcherBranch == "beta";
+            
+            // Get all releases (not just latest) to support beta channel
+            var apiUrl = $"{GitHubApiUrl}?per_page=50";
+            var json = await _httpClient.GetStringAsync(apiUrl);
+            using var doc = JsonDocument.Parse(json);
+
+            var currentVersion = GetLauncherVersion();
+            string? bestVersion = null;
+            JsonElement? bestRelease = null;
+
+            foreach (var release in doc.RootElement.EnumerateArray())
+            {
+                var tagName = release.GetProperty("tag_name").GetString();
+                if (string.IsNullOrWhiteSpace(tagName)) continue;
+                
+                // Check GitHub's native prerelease flag
+                var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseVal) && prereleaseVal.GetBoolean();
+                
+                // Match channel: beta channel gets prereleases, stable gets stable releases
+                if (isBetaChannel && !isPrerelease)
+                {
+                    // User wants beta, skip stable releases
+                    continue;
+                }
+                else if (!isBetaChannel && isPrerelease)
+                {
+                    // User wants stable, skip prereleases
+                    continue;
+                }
+                
+                // Parse version from tag
+                var version = ParseVersionFromTag(tagName);
+                if (string.IsNullOrWhiteSpace(version)) continue;
+                
+                // Compare with current version
+                if (IsNewerVersion(version, currentVersion))
+                {
+                    // Check if this is better than our current best
+                    if (bestVersion == null || IsNewerVersion(version, bestVersion))
+                    {
+                        bestVersion = version;
+                        bestRelease = release;
+                    }
+                }
+            }
+
+            if (bestRelease.HasValue && !string.IsNullOrWhiteSpace(bestVersion))
+            {
+                var release = bestRelease.Value;
+                Logger.Info("Update", $"Update available: {currentVersion} -> {bestVersion} (channel: {launcherBranch})");
+                
+                // Pick the right asset for this platform
+                string? downloadUrl = null;
+                string? assetName = null;
+                var assets = release.GetProperty("assets");
+                var arch = RuntimeInformation.ProcessArchitecture;
+
+                string? targetAsset = null;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    targetAsset = "macos-arm64.dmg";
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    targetAsset = "windows-x64.exe";
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                    targetAsset = arch == Architecture.Arm64 ? "linux-arm64.tar.gz" : "linux-x64.AppImage";
+
+                if (!string.IsNullOrWhiteSpace(targetAsset))
+                {
+                    foreach (var asset in assets.EnumerateArray())
+                    {
+                        var name = asset.GetProperty("name").GetString();
+                        if (!string.IsNullOrWhiteSpace(name) && name.Contains(targetAsset, StringComparison.OrdinalIgnoreCase))
+                        {
+                            downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                            assetName = name;
+                            break;
+                        }
+                    }
+                }
+
+                var updateInfo = new
+                {
+                    version = bestVersion,
+                    currentVersion = currentVersion,
+                    downloadUrl = downloadUrl ?? "",
+                    assetName = assetName ?? "",
+                    releaseUrl = release.GetProperty("html_url").GetString() ?? "",
+                    isBeta = launcherBranch == "beta"
+                };
+                    
+                _onUpdateAvailable?.Invoke(updateInfo);
+            }
+            else
+            {
+                Logger.Info("Update", $"Launcher is up to date: {currentVersion} (channel: {launcherBranch})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Error checking for updates: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Скачивает и устанавливает обновление лаунчера.
+    /// После успешной загрузки автоматически заменяет текущий файл и перезапускает лаунчер.
+    /// </summary>
+    public async Task<bool> UpdateAsync(JsonElement[]? args)
+    {
+        try
+        {
+            var launcherBranch = GetLauncherBranch();
+            var isBetaChannel = launcherBranch == "beta";
+            var currentVersion = GetLauncherVersion();
+            
+            // Get all releases to find the best match for user's channel
+            var apiUrl = $"{GitHubApiUrl}?per_page=50";
+            var json = await _httpClient.GetStringAsync(apiUrl);
+            using var doc = JsonDocument.Parse(json);
+            
+            // Find the best release for the user's channel
+            JsonElement? targetRelease = null;
+            string? targetVersion = null;
+            
+            foreach (var release in doc.RootElement.EnumerateArray())
+            {
+                var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseVal) && prereleaseVal.GetBoolean();
+                
+                // Match channel
+                if (isBetaChannel && !isPrerelease) continue; // Beta wants prereleases
+                if (!isBetaChannel && isPrerelease) continue; // Stable wants releases
+                
+                var tagName = release.GetProperty("tag_name").GetString();
+                if (string.IsNullOrWhiteSpace(tagName)) continue;
+                
+                var version = ParseVersionFromTag(tagName);
+                if (string.IsNullOrWhiteSpace(version)) continue;
+                
+                // Take the first matching release (they're sorted newest first)
+                if (targetRelease == null)
+                {
+                    targetRelease = release;
+                    targetVersion = version;
+                    break;
+                }
+            }
+            
+            if (!targetRelease.HasValue || string.IsNullOrWhiteSpace(targetVersion))
+            {
+                Logger.Error("Update", $"No suitable {(isBetaChannel ? "pre-release" : "release")} found");
+                _browserOpenUrl(ReleasesPageUrl);
+                return false;
+            }
+            
+            Logger.Info("Update", $"Downloading {(isBetaChannel ? "pre-release" : "release")} {targetVersion} (current: {currentVersion})");
+            
+            var assets = targetRelease.Value.GetProperty("assets");
+
+            // Pick asset by platform/arch
+            string? targetAsset = null;
+            var arch = RuntimeInformation.ProcessArchitecture;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                targetAsset = "macos-arm64.dmg"; // Apple Silicon only
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                targetAsset = "windows-x64.exe";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                targetAsset = arch == Architecture.Arm64 ? "linux-arm64.tar.gz" : "linux-x64.AppImage";
+            }
+
+            if (string.IsNullOrWhiteSpace(targetAsset))
+            {
+                Logger.Warning("Update", "Unsupported OS for auto-download, opening releases page");
+                _browserOpenUrl(ReleasesPageUrl);
+                return false;
+            }
+
+            string? downloadUrl = null;
+            string? assetName = null;
+            foreach (var asset in assets.EnumerateArray())
+            {
+                var name = asset.GetProperty("name").GetString();
+                if (!string.IsNullOrWhiteSpace(name) && name.Contains(targetAsset, StringComparison.OrdinalIgnoreCase))
+                {
+                    downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                    assetName = name;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(downloadUrl) || string.IsNullOrWhiteSpace(assetName))
+            {
+                Logger.Error("Update", "Could not find matching asset in latest release; opening releases page");
+                _browserOpenUrl(ReleasesPageUrl);
+                return false;
+            }
+
+            var downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloadsDir);
+            var targetPath = Path.Combine(downloadsDir, assetName);
+
+            Logger.Info("Update", $"Downloading latest launcher to {targetPath}");
+            using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+            {
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync();
+                await using var file = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                var buffer = new byte[8192];
+                int read;
+                while ((read = await stream.ReadAsync(buffer)) > 0)
+                {
+                    await file.WriteAsync(buffer.AsMemory(0, read));
+                }
+            }
+
+            // Platform-specific installation
+            await InstallUpdateAsync(targetPath);
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Update failed: {ex.Message}");
+            _browserOpenUrl(ReleasesPageUrl);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Принудительно сбрасывает версию latest instance для триггера обновления игры.
+    /// </summary>
+    public async Task<bool> ForceUpdateLatestAsync(string branch)
+    {
+        try
+        {
+            var normalizedBranch = _normalizeVersionType(branch);
+            var versions = await _versionService.GetVersionListAsync(normalizedBranch);
+            if (versions.Count == 0) return false;
+
+            var info = _loadLatestInfo(normalizedBranch);
+            
+            if (info == null)
+            {
+                // No version info, assume version 1 to force full update path
+                _saveLatestInfo(normalizedBranch, 1);
+                Logger.Info("Update", $"No version info found, set to v1 to force update");
+            }
+            else
+            {
+                // Set installed version to one less than latest to trigger update
+                int latestVersion = versions[0];
+                if (info.Version < latestVersion)
+                {
+                    // Already behind, just return true
+                    Logger.Info("Update", $"Already needs update: v{info.Version} -> v{latestVersion}");
+                    return true;
+                }
+                // If somehow at or ahead of latest, force update by going back one version
+                int forcedVersion = Math.Max(1, latestVersion - 1);
+                _saveLatestInfo(normalizedBranch, forcedVersion);
+                Logger.Info("Update", $"Forced version to v{forcedVersion} to trigger update to v{latestVersion}");
+            }
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Failed to force update: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Duplicates the current latest instance as a versioned instance.
+    /// Creates a copy with the current version number.
+    /// </summary>
+    public async Task<bool> DuplicateLatestAsync(string branch)
+    {
+        try
+        {
+            var normalizedBranch = _normalizeVersionType(branch);
+            var info = _loadLatestInfo(normalizedBranch);
+            
+            if (info == null)
+            {
+                Logger.Warning("Update", "Cannot duplicate latest: no version info found");
+                return false;
+            }
+            
+            var currentVersion = info.Version;
+            var latestPath = _getLatestInstancePath();
+            
+            if (!_isClientPresent(latestPath))
+            {
+                Logger.Warning("Update", "Cannot duplicate latest: instance not found");
+                return false;
+            }
+            
+            // Get versioned instance path
+            var versionedPath = _resolveInstancePath(normalizedBranch, currentVersion, true);
+            
+            // Check if this version already exists
+            if (_isClientPresent(versionedPath))
+            {
+                Logger.Warning("Update", $"Version {currentVersion} already exists, skipping duplicate");
+                return false;
+            }
+            
+            // Copy the entire latest instance folder to versioned folder
+            Logger.Info("Update", $"Duplicating latest (v{currentVersion}) to versioned instance...");
+            CopyDirectory(latestPath, versionedPath);
+            
+            // Save version info for the duplicated instance
+            var versionInfoPath = Path.Combine(versionedPath, "version.json");
+            var versionInfo = new { Version = currentVersion, Branch = normalizedBranch };
+            File.WriteAllText(versionInfoPath, System.Text.Json.JsonSerializer.Serialize(versionInfo));
+            
+            Logger.Success("Update", $"Duplicated latest to versioned instance v{currentVersion}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Failed to duplicate latest: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Recursively copies a directory and all its contents.
+    /// </summary>
+    private void CopyDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        
+        // Copy files
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var fileName = Path.GetFileName(file);
+            var destFile = Path.Combine(destDir, fileName);
+            File.Copy(file, destFile, true);
+        }
+        
+        // Copy subdirectories recursively
+        foreach (var subDir in Directory.GetDirectories(sourceDir))
+        {
+            var dirName = Path.GetFileName(subDir);
+            var destSubDir = Path.Combine(destDir, dirName);
+            CopyDirectory(subDir, destSubDir);
+        }
+    }
+
+    #endregion
+
+    #region Platform-Specific Installation
+
+    private async Task InstallUpdateAsync(string targetPath)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            await InstallMacOSUpdateAsync(targetPath);
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            InstallWindowsUpdate(targetPath);
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            InstallLinuxUpdate(targetPath);
+        }
+    }
+
+    private async Task InstallMacOSUpdateAsync(string dmgPath)
+    {
+        try
+        {
+            Logger.Info("Update", "Mounting DMG and installing...");
+            
+            // Mount the DMG
+            var mountProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = "hdiutil",
+                Arguments = $"attach \"{dmgPath}\" -nobrowse -readonly",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            
+            if (mountProcess == null)
+            {
+                throw new Exception("Failed to mount DMG");
+            }
+            
+            await mountProcess.WaitForExitAsync();
+            var mountOutput = await mountProcess.StandardOutput.ReadToEndAsync();
+            
+            // Parse mount point from hdiutil output (last line, last column)
+            var mountPoint = mountOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .LastOrDefault()?
+                .Split('\t', StringSplitOptions.RemoveEmptyEntries)
+                .LastOrDefault()?
+                .Trim();
+            
+            if (string.IsNullOrWhiteSpace(mountPoint) || !Directory.Exists(mountPoint))
+            {
+                throw new Exception($"Could not find mount point. Output: {mountOutput}");
+            }
+            
+            Logger.Info("Update", $"DMG mounted at: {mountPoint}");
+            
+            // Find the .app in the mounted DMG
+            var appInDmg = Directory.GetDirectories(mountPoint, "*.app").FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(appInDmg) || !Directory.Exists(appInDmg))
+            {
+                Process.Start("hdiutil", $"detach \"{mountPoint}\" -force");
+                throw new Exception("No .app found in DMG");
+            }
+            
+            // Get current app path
+            var currentExe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(currentExe))
+            {
+                Process.Start("hdiutil", $"detach \"{mountPoint}\" -force");
+                throw new Exception("Could not determine current executable path");
+            }
+            
+            // Navigate up to get the .app bundle path
+            var currentAppPath = currentExe;
+            for (int i = 0; i < 3; i++) // Go up 3 levels to get to .app
+            {
+                currentAppPath = Path.GetDirectoryName(currentAppPath);
+                if (string.IsNullOrEmpty(currentAppPath)) break;
+            }
+            
+            if (string.IsNullOrEmpty(currentAppPath) || !currentAppPath.EndsWith(".app"))
+            {
+                Process.Start("hdiutil", $"detach \"{mountPoint}\" -force");
+                throw new Exception($"Could not determine .app path from: {currentExe}");
+            }
+            
+            Logger.Info("Update", $"Current app: {currentAppPath}");
+            Logger.Info("Update", $"New app: {appInDmg}");
+            
+            // Create update script to replace app and restart
+            var updateScript = Path.Combine(Path.GetTempPath(), "hyprism_update.sh");
+            var scriptContent = $@"#!/bin/bash
+sleep 2
+rm -rf ""{currentAppPath}""
+cp -R ""{appInDmg}"" ""{currentAppPath}""
+hdiutil detach ""{mountPoint}"" -force
+rm -f ""{dmgPath}""
+open ""{currentAppPath}""
+rm -f ""$0""
+";
+            
+            File.WriteAllText(updateScript, scriptContent);
+            Process.Start("chmod", $"+x \"{updateScript}\"")?.WaitForExit();
+            
+            // Start the update script and exit
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "/bin/bash",
+                Arguments = $"\"{updateScript}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            
+            Logger.Info("Update", "Update script started, exiting launcher...");
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Auto-update failed: {ex.Message}");
+            try { Process.Start("open", dmgPath); } catch { }
+            throw new Exception($"Please install the update manually from Downloads. {ex.Message}");
+        }
+    }
+
+    private void InstallWindowsUpdate(string exePath)
+    {
+        try
+        {
+            var currentExe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(currentExe))
+            {
+                Logger.Error("Update", "Could not determine current executable path");
+                Process.Start("explorer.exe", $"/select,\"{exePath}\"");
+                return;
+            }
+
+            // Create a batch script to replace the exe and restart
+            var batchPath = Path.Combine(Path.GetTempPath(), "hyprism_update.bat");
+            var batchContent = $@"@echo off
+timeout /t 2 /nobreak >nul
+del ""{currentExe}"" 2>nul
+move /y ""{exePath}"" ""{currentExe}""
+start """" ""{currentExe}""
+del ""%~f0""
+";
+            File.WriteAllText(batchPath, batchContent);
+
+            // Start the batch script and exit
+            var psi = new ProcessStartInfo
+            {
+                FileName = batchPath,
+                UseShellExecute = true,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            Process.Start(psi);
+
+            Logger.Info("Update", "Starting update script and exiting...");
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("Update", $"Auto-update failed, opening Explorer: {ex.Message}");
+            Process.Start("explorer.exe", $"/select,\"{exePath}\"");
+        }
+    }
+
+    private void InstallLinuxUpdate(string targetPath)
+    {
+        try
+        {
+            var currentExe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(currentExe))
+            {
+                throw new Exception("Could not determine current executable path");
+            }
+            
+            // For AppImage, just replace the file
+            if (targetPath.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase))
+            {
+                // Make the new AppImage executable
+                Process.Start("chmod", $"+x \"{targetPath}\"")?.WaitForExit();
+                
+                // Create update script
+                var updateScript = Path.Combine(Path.GetTempPath(), "hyprism_update.sh");
+                var scriptContent = $@"#!/bin/bash
+sleep 2
+rm -f ""{currentExe}""
+mv ""{targetPath}"" ""{currentExe}""
+chmod +x ""{currentExe}""
+""{currentExe}"" &
+rm -f ""$0""
+";
+                File.WriteAllText(updateScript, scriptContent);
+                Process.Start("chmod", $"+x \"{updateScript}\"")?.WaitForExit();
+                
+                // Start the update script and exit
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    Arguments = $"\"{updateScript}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                
+                Logger.Info("Update", "Update script started, exiting launcher...");
+                Environment.Exit(0);
+            }
+            else
+            {
+                // For other formats, just open the file manager
+                try { Process.Start("xdg-open", Path.GetDirectoryName(targetPath) ?? ""); } catch { }
+                throw new Exception("Please install the update manually from Downloads.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update", $"Auto-update failed: {ex.Message}");
+            try { Process.Start("xdg-open", targetPath); } catch { }
+            throw new Exception($"Please install the update manually from Downloads. {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Version Parsing
+
+    private static string? ParseVersionFromTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return null;
+        
+        var tagLower = tag.ToLowerInvariant();
+        
+        // Handle beta format: "beta3-3.0.0" or "beta-3.0.0"
+        if (tagLower.StartsWith("beta"))
+        {
+            var dashIndex = tag.IndexOf('-');
+            if (dashIndex >= 0 && dashIndex < tag.Length - 1)
+            {
+                var versionPart = tag.Substring(dashIndex + 1).TrimStart('v', 'V');
+                return versionPart;
+            }
+            // beta without dash, try to extract version after "beta" text
+            var afterBeta = tag.Substring(4).TrimStart('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').TrimStart('-', '_').TrimStart('v', 'V');
+            return string.IsNullOrWhiteSpace(afterBeta) ? null : afterBeta;
+        }
+        
+        // Handle standard format: "v2.0.1" or "2.0.1"
+        return tag.TrimStart('v', 'V');
+    }
+
+    private static bool IsNewerVersion(string remote, string current)
+    {
+        // Parse versions like "2.0.1" into comparable parts
+        var remoteParts = remote.Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).ToArray();
+        var currentParts = current.Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).ToArray();
+
+        for (int i = 0; i < Math.Max(remoteParts.Length, currentParts.Length); i++)
+        {
+            var r = i < remoteParts.Length ? remoteParts[i] : 0;
+            var c = i < currentParts.Length ? currentParts[i] : 0;
+            if (r > c) return true;
+            if (r < c) return false;
+        }
+        return false;
+    }
+
+    #endregion
+}

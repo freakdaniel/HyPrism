@@ -4,6 +4,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:HyPrism.UI.ViewModels"
         xmlns:views="using:HyPrism.UI.Views"
+        xmlns:dashboard="using:HyPrism.UI.Components.Dashboard"
+        xmlns:layouts="using:HyPrism.UI.Components.Layouts"
         xmlns:btn="using:HyPrism.UI.Components.Buttons"
         xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
@@ -30,24 +32,6 @@
             <Setter Property="Opacity" Value="1"/>
             <Setter Property="IsHitTestVisible" Value="True"/>
         </Style>
-        
-        <!-- Modal Content Animation (Scale + Fade) -->
-        <Style Selector="Grid.modal">
-             <Setter Property="Opacity" Value="0"/>
-             <Setter Property="IsHitTestVisible" Value="False"/>
-             <Setter Property="RenderTransform" Value="scale(0.95)"/>
-             <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="CubicEaseOut"/>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="BackEaseOut"/>
-                </Transitions>
-             </Setter>
-        </Style>
-        <Style Selector="Grid.modal[Tag=True]">
-             <Setter Property="Opacity" Value="1"/>
-             <Setter Property="IsHitTestVisible" Value="True"/>
-             <Setter Property="RenderTransform" Value="scale(1)"/>
-        </Style>
     </Window.Styles>
 
     <Design.DataContext>
@@ -73,208 +57,31 @@
             <Rectangle Fill="#CC090909"/> 
         
             <!-- Main Layout Grid -->
-            <Grid Margin="30">
-                
-                <!-- TOP LEFT: Profile -->
-                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Left" Spacing="8">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <!-- Avatar -->
-                        <Border Width="48" Height="48" CornerRadius="24" 
-                                Background="{DynamicResource SystemAccentBrush}" 
-                                ClipToBounds="True">
-                            <TextBlock Text=":)" 
-                                       HorizontalAlignment="Center" 
-                                       VerticalAlignment="Center" 
-                                       FontSize="20"
-                                       FontWeight="Bold"
-                                       Foreground="#111"/>
-                        </Border>
-                        
-                        <!-- Nick + Edit Button -->
-                        <StackPanel VerticalAlignment="Center" Spacing="2">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="{Binding Nick}" 
-                                           FontSize="20" 
-                                           FontWeight="Bold" 
-                                           Foreground="White"/>
-                                <Button Command="{Binding ToggleProfileEditorCommand}"
-                                        Background="Transparent" 
-                                        Padding="4" 
-                                        CornerRadius="4"
-                                        VerticalAlignment="Center">
-                                    <svg:Svg Path="/Assets/Icons/edit.svg" Width="14" Height="14"/>
-                                </Button>
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                    
-                    <!-- Version -->
-                    <TextBlock Text="{Binding AppVersion^, StringFormat='{}{0}'}" 
-                               FontSize="11" 
-                               Foreground="#999"
-                               Margin="4,0,0,0"/>
-                </StackPanel>
-                
-                <!-- TOP RIGHT: Logo + Icons -->
-                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Right" Spacing="16">
-                    <!-- Hytale Logo -->
-                    <Image Source="/Assets/logo-wide.png" 
-                           Width="180" 
-                           Height="70" 
-                           Stretch="Uniform"
-                           HorizontalAlignment="Right"/>
-                    
-                    <!-- Action Icons -->
-                    <StackPanel Orientation="Horizontal" 
-                                Spacing="8" 
-                                HorizontalAlignment="Right">
-                        <!-- Discord -->
-                        <Button Background="#5865F2" 
-                                Padding="8" 
-                                CornerRadius="6"
-                                Width="36" Height="36">
-                            <svg:Svg Path="/Assets/Icons/discord.svg" Width="20" Height="20"/>
-                        </Button>
-                        
-                        <!-- GitHub -->
-                        <Button Background="#333" 
-                                Padding="8" 
-                                CornerRadius="6"
-                                Width="36" Height="36">
-                            <svg:Svg Path="/Assets/Icons/github.svg" Width="20" Height="20"/>
-                        </Button>
-                        
-                        <!-- Settings -->
-                        <Button Command="{Binding ToggleSettingsCommand}"
-                                Background="#333" 
-                                Padding="8" 
-                                CornerRadius="6"
-                                Width="36" Height="36">
-                            <svg:Svg Path="/Assets/Icons/settings.svg" Width="20" Height="20"/>
-                        </Button>
-                    </StackPanel>
-                </StackPanel>
-                
-                <!-- RIGHT PANEL: News (UserControl) -->
-                <views:NewsView VerticalAlignment="Stretch" 
-                                HorizontalAlignment="Right"
-                                Margin="0,140,0,80"
-                                DataContext="{Binding NewsViewModel}"
-                                IsVisible="{Binding !AppService.Configuration.DisableNews}"/>                
-                <!-- BOTTOM LEFT: Music Player (Temporarily disabled) -->
-                <!-- <views:MusicPlayerView VerticalAlignment="Bottom"
-                                       HorizontalAlignment="Left"
-                                       Margin="30,0,0,30"/> -->
-                                
-                <!-- BOTTOM LEFT: Action Buttons -->
-                <StackPanel VerticalAlignment="Bottom" 
-                            HorizontalAlignment="Left"
-                            Orientation="Horizontal" 
-                            Spacing="10">
-                    <!-- Mods -->
-                    <Button Command="{Binding ToggleModsCommand}"
-                            Background="#2a2a2a" 
-                            Padding="12" 
-                            CornerRadius="8"
-                            Width="50" Height="50">
-                        <svg:Svg Path="/Assets/Icons/package.svg" Width="24" Height="24"/>
-                    </Button>
-                    
-                    <!-- Folder -->
-                    <Button Command="{Binding OpenFolderCommand}"
-                            Background="#2a2a2a" 
-                            Padding="12" 
-                            CornerRadius="8"
-                            Width="50" Height="50">
-                        <svg:Svg Path="/Assets/Icons/folder.svg" Width="24" Height="24"/>
-                    </Button>
-                    
-                    <!-- Settings -->
-                    <Button Background="#2a2a2a" 
-                            Padding="12" 
-                            CornerRadius="8"
-                            Width="50" Height="50">
-                        <svg:Svg Path="/Assets/Icons/settings.svg" Width="24" Height="24"/>
-                    </Button>
-                    
-                    <!-- Network/WiFi -->
-                    <Button Background="#2a2a2a" 
-                            Padding="12" 
-                            CornerRadius="8"
-                            Width="50" Height="50">
-                        <svg:Svg Path="/Assets/Icons/wifi.svg" Width="24" Height="24"/>
-                    </Button>
-                </StackPanel>
-                
-                <!-- BOTTOM CENTER: Educational Text -->
-                <TextBlock VerticalAlignment="Bottom" 
-                           HorizontalAlignment="Center"
-                           Margin="0,0,0,8">
-                    <Run Text="{Binding MainEducational^}" Foreground="#999" FontSize="12"/>
-                    <Run Text=" "/>
-                    <Run Text="{Binding MainBuyIt^}" Foreground="{DynamicResource SystemAccentBrush}" FontSize="12" FontWeight="Bold"/>
-                </TextBlock>
-                
-                <!-- BOTTOM RIGHT: Version Selector + Play Button -->
-                <StackPanel VerticalAlignment="Bottom" 
-                            HorizontalAlignment="Right"
-                            Orientation="Horizontal"
-                            Spacing="12">
-                    <!-- Version Selector -->
-                    <Border Background="#2a2a2a"
-                            Padding="12,0"
-                            Height="50"
-                            CornerRadius="8">
-                        <StackPanel Orientation="Horizontal" 
-                                    Spacing="8"
-                                    VerticalAlignment="Center">
-                            <svg:Svg Path="/Assets/Icons/git-branch.svg" Width="18" Height="18"/>
-                            <TextBlock Text="Release" 
-                                       FontSize="14" 
-                                       Foreground="White"
-                                       VerticalAlignment="Center"/>
-                            <svg:Svg Path="/Assets/Icons/chevron-right.svg" Width="14" Height="14"/>
-                            <TextBlock Text="latest" 
-                                       FontSize="14" 
-                                       Foreground="#999"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    
-                    <!-- Play Button -->
-                    <btn:PrimaryButton Command="{Binding LaunchCommand}" 
-                                       Height="50"
-                                       FontSize="18">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <svg:Svg Path="/Assets/Icons/play.svg" Width="20" Height="20">
-                                <svg:Svg.Css>* { stroke: #111 !important; fill: #111 !important; }</svg:Svg.Css>
-                            </svg:Svg>
-                            <TextBlock Text="{Binding MainPlay^}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </btn:PrimaryButton>
-                </StackPanel>
-            </Grid>
+            <views:DashboardView />
         </Grid>
 
-        <!-- Global Overlay Layer -->
-        <Grid Classes="overlay-layer" Tag="{Binding IsOverlayOpen}">
-            <!-- Dimmer Background -->
+        <!-- Settings Overlay -->
+        <Grid Classes="overlay-layer" Tag="{Binding IsSettingsOpen}" ZIndex="100">
             <Border Background="#B3000000"/>
-            
-            <!-- Settings Overlay -->
-            <Grid Classes="modal" Tag="{Binding IsSettingsOpen}">
+            <layouts:ModalWrapper IsOpen="{Binding IsSettingsOpen}">
                 <views:SettingsView DataContext="{Binding SettingsViewModel}" Width="900" Height="650" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            
-            <!-- Mods Overlay -->
-            <Grid Classes="modal" Tag="{Binding IsModsOpen}">
+            </layouts:ModalWrapper>
+        </Grid>
+        
+        <!-- Mods Overlay -->
+        <Grid Classes="overlay-layer" Tag="{Binding IsModsOpen}" ZIndex="100">
+            <Border Background="#B3000000"/>
+            <layouts:ModalWrapper IsOpen="{Binding IsModsOpen}">
                 <views:ModManagerView DataContext="{Binding ModManagerViewModel}" Width="1100" Height="750" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            
-            <!-- Profile Editor Overlay -->
-            <Grid Classes="modal" Tag="{Binding IsProfileEditorOpen}">
+            </layouts:ModalWrapper>
+        </Grid>
+        
+        <!-- Profile Editor Overlay -->
+        <Grid Classes="overlay-layer" Tag="{Binding IsProfileEditorOpen}" ZIndex="100">
+            <Border Background="#B3000000"/>
+            <layouts:ModalWrapper IsOpen="{Binding IsProfileEditorOpen}">
                 <views:ProfileEditorView DataContext="{Binding ProfileEditorViewModel}" Width="700" Height="600" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
+            </layouts:ModalWrapper>
         </Grid>
         
         <!-- Update/Download Progress Overlay -->

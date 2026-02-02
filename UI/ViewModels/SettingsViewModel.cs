@@ -1,11 +1,11 @@
 using ReactiveUI;
 using System.Reactive;
-using HyPrism.Backend;
+using HyPrism.Services;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
 using System.Linq;
-using HyPrism.Backend.Services.Core;
+using HyPrism.Services.Core;
 using System;
 using System.Reactive.Linq;
 

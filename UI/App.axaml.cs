@@ -5,8 +5,8 @@ using AsyncImageLoader;
 using AsyncImageLoader.Loaders;
 using HyPrism.UI.ViewModels;
 using HyPrism.UI.Services;
-using HyPrism.Backend.Services.Core;
-using HyPrism.Backend;
+using HyPrism.Services.Core;
+using HyPrism.Services;
 
 namespace HyPrism.UI;
 

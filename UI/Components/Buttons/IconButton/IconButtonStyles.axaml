@@ -1,0 +1,117 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:btn="using:HyPrism.UI.Components.Buttons"
+        xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia">
+    
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <btn:IconButton Content="Icon" ButtonBackground="#2a2a2a" Width="50" Height="50"/>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- IconButton Style -->
+    <Style Selector="btn|IconButton">
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2"/>
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                 <Border Classes="icon-btn-bg"
+                        Name="PART_Border"
+                        Background="{TemplateBinding ButtonBackground}"
+                        BorderBrush="#333"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch">
+
+                    <!-- Container for Icon -->
+                    <Panel Name="PART_IconContainer"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Width="{TemplateBinding IconSize}"
+                           Height="{TemplateBinding IconSize}"
+                           RenderTransformOrigin="50%,50%">
+                        
+                         <!-- Base Icon (White) -->
+                         <svg:Svg Name="PART_BaseIcon"
+                                  Path="{TemplateBinding IconPath}"
+                                  Width="{TemplateBinding IconSize}"
+                                  Height="{TemplateBinding IconSize}"
+                                  Css="* { stroke: #FFFFFF; fill: none; }"
+                                  IsHitTestVisible="False"/>
+
+                         <!-- Hover Overlay (Accent Color) -->
+                         <svg:Svg Name="PART_HoverOverlay"
+                                  Path="{TemplateBinding IconPath}"
+                                  Width="{TemplateBinding IconSize}"
+                                  Height="{TemplateBinding IconSize}"
+                                  Css="{TemplateBinding HoverCss}"
+                                  Opacity="0"
+                                  IsHitTestVisible="False">
+                             <svg:Svg.Transitions>
+                                 <Transitions>
+                                     <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="LinearEasing"/>
+                                 </Transitions>
+                             </svg:Svg.Transitions>
+                         </svg:Svg>
+                         
+                        <Panel.Transitions>
+                            <Transitions>
+                                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </Panel.Transitions>
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    
+    <!-- Hover State: Fade in Orange Overlay -->
+    <Style Selector="btn|IconButton:pointerover /template/ svg|Svg#PART_HoverOverlay">
+        <Setter Property="Opacity" Value="1"/>
+    </Style>
+    
+    <!-- Hover State: Scale Up Container -->
+    
+    <!-- Hover State: Scale Up Container -->
+    <Style Selector="btn|IconButton:pointerover /template/ Panel#PART_IconContainer">
+        <Setter Property="RenderTransform" Value="scale(1.15)"/>
+    </Style>
+    
+    <!-- Pressed State: Scale Down Container -->
+    <Style Selector="btn|IconButton:pressed /template/ Panel#PART_IconContainer">
+        <Setter Property="RenderTransform" Value="scale(0.95)"/>
+    </Style>
+
+    <!-- Animations for IconButton Border -->
+    <Style Selector="btn|IconButton /template/ Border#PART_Border">
+         <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.2"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    
+    <Style Selector="btn|IconButton:pointerover /template/ Border#PART_Border">
+        <Setter Property="Background" Value="#333333"/>
+        <Setter Property="BorderBrush" Value="#444444"/>
+    </Style>
+    
+    <Style Selector="btn|IconButton:pressed /template/ Border#PART_Border">
+         <Setter Property="Background" Value="#222222"/>
+    </Style>
+</Styles>

@@ -1,6 +1,6 @@
 using ReactiveUI;
-using HyPrism.Backend;
-using HyPrism.Backend.Models;
+using HyPrism.Services;
+using HyPrism.Models;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Reactive;

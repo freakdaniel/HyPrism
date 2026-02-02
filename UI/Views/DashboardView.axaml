@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:HyPrism.UI.ViewModels"
+             xmlns:views="using:HyPrism.UI.Views"
+             xmlns:dashboard="using:HyPrism.UI.Components.Dashboard"
+             mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
+             x:Class="HyPrism.UI.Views.DashboardView"
+             x:DataType="vm:MainViewModel">
+    
+    <Grid Margin="30">
+        <!-- Header Component -->
+        <dashboard:Header DataContext="{Binding HeaderViewModel}" VerticalAlignment="Top" />
+        
+        <!-- RIGHT PANEL: News (UserControl) -->
+        <views:NewsView VerticalAlignment="Stretch" 
+                        HorizontalAlignment="Right"
+                        Margin="0,140,0,80"
+                        DataContext="{Binding NewsViewModel}"
+                        IsVisible="{Binding !AppService.Configuration.DisableNews}"/>                
+                        
+        <!-- Game Control Bar (Bottom Actions + Play) -->
+        <dashboard:GameControlBar DataContext="{Binding GameControlViewModel}" VerticalAlignment="Bottom" />
+    </Grid>
+</UserControl>

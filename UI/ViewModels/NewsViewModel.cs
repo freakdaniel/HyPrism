@@ -6,9 +6,9 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
-using HyPrism.Backend;
-using HyPrism.Backend.Services.Core;
-using HyPrism.Backend.Models;
+using HyPrism.Services;
+using HyPrism.Services.Core;
+using HyPrism.Models;
 
 namespace HyPrism.UI.ViewModels;
 

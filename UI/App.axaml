@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
              xmlns:converters="using:HyPrism.UI.Converters"
+             xmlns:btn="using:HyPrism.UI.Components.Buttons"
              x:Class="HyPrism.UI.App"
              RequestedThemeVariant="Dark">
     <Application.Resources>
@@ -28,6 +29,9 @@
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://HyPrism/UI/Components/Buttons/IconButton/IconButtonStyles.axaml"/>
+        <StyleInclude Source="avares://HyPrism/UI/Components/Buttons/PrimaryButton/PrimaryButtonStyles.axaml"/>
+        
         <Style Selector="svg|Svg">
             <Setter Property="Css" Value="* { stroke: white !important; fill: none !important; }"/>
         </Style>

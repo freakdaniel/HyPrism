@@ -2,7 +2,7 @@ using System;
 using System.Reactive.Linq;
 using Avalonia.Data;
 using Avalonia.Markup.Xaml;
-using HyPrism.Backend.Services.Core;
+using HyPrism.Services.Core;
 
 namespace HyPrism.UI.Converters;
 

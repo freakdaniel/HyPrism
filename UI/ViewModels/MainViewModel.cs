@@ -1,14 +1,15 @@
 using ReactiveUI;
 using System.Reactive;
-using HyPrism.Backend;
-using HyPrism.Backend.Services.Core;
-using HyPrism.Backend.Models;
+using HyPrism.Services;
+using HyPrism.Services.Core;
+using HyPrism.Models;
 using System.Threading.Tasks;
 using System;
 using Avalonia.Threading;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Linq;
+using HyPrism.UI.ViewModels.Dashboard;
 
 namespace HyPrism.UI.ViewModels;
 
@@ -17,22 +18,15 @@ public class MainViewModel : ReactiveObject
     public AppService AppService { get; }
     public LocalizationService Localization => AppService.Localization;
 
-    // Reactive Localization Properties
-    public IObservable<string> AppVersion { get; }
-    public IObservable<string> MainEducational { get; }
-    public IObservable<string> MainBuyIt { get; }
-    public IObservable<string> MainPlay { get; }
+    // Partial ViewModels
+    public HeaderViewModel HeaderViewModel { get; }
+    public GameControlViewModel GameControlViewModel { get; }
 
-    // User Profile
-    private string _nick;
-    public string Nick
-    {
-        get => _nick;
-        set => this.RaiseAndSetIfChanged(ref _nick, value);
-    }
+    // User Profile - MOVED to HeaderViewModel
     
     // Status
     private bool _isGameRunning;
+
     public bool IsGameRunning
     {
         get => _isGameRunning;
@@ -81,41 +75,73 @@ public class MainViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _overlayOpacity, value);
     }
     
-    // Versioning
-    private string _selectedBranch = "Release";
-    public string SelectedBranch
-    {
-        get => _selectedBranch;
-        set => this.RaiseAndSetIfChanged(ref _selectedBranch, value);
-    }
-    
-    private int _selectedVersion = 0;
-    public int SelectedVersion
-    {
-        get => _selectedVersion;
-        set => this.RaiseAndSetIfChanged(ref _selectedVersion, value);
-    }
+    // Versioning - MOVED to GameControlViewModel
 
     // Overlays
     private bool _isSettingsOpen;
     public bool IsSettingsOpen
     {
         get => _isSettingsOpen;
-        set => this.RaiseAndSetIfChanged(ref _isSettingsOpen, value);
+        set
+        {
+            if (_isSettingsOpen != value)
+            {
+                _isSettingsOpen = value;
+                this.RaisePropertyChanged();
+                
+                if (value)
+                {
+                    _isConfigOpen = false;
+                    this.RaisePropertyChanged(nameof(IsModsOpen));
+                    _isProfileEditorOpen = false;
+                    this.RaisePropertyChanged(nameof(IsProfileEditorOpen));
+                }
+            }
+        }
     }
 
     private bool _isConfigOpen; // For ModManager or others
     public bool IsModsOpen
     {
         get => _isConfigOpen;
-        set => this.RaiseAndSetIfChanged(ref _isConfigOpen, value);
+        set
+        {
+            if (_isConfigOpen != value)
+            {
+                _isConfigOpen = value;
+                this.RaisePropertyChanged();
+                
+                if (value)
+                {
+                    _isSettingsOpen = false;
+                    this.RaisePropertyChanged(nameof(IsSettingsOpen));
+                    _isProfileEditorOpen = false;
+                    this.RaisePropertyChanged(nameof(IsProfileEditorOpen));
+                }
+            }
+        }
     }
     
     private bool _isProfileEditorOpen;
     public bool IsProfileEditorOpen
     {
         get => _isProfileEditorOpen;
-        set => this.RaiseAndSetIfChanged(ref _isProfileEditorOpen, value);
+        set
+        {
+            if (_isProfileEditorOpen != value)
+            {
+                _isProfileEditorOpen = value;
+                this.RaisePropertyChanged();
+                
+                if (value)
+                {
+                    _isSettingsOpen = false;
+                    this.RaisePropertyChanged(nameof(IsSettingsOpen));
+                    _isConfigOpen = false;
+                    this.RaisePropertyChanged(nameof(IsModsOpen));
+                }
+            }
+        }
     }
     
     private bool _isLoading = true;
@@ -200,7 +226,7 @@ public class MainViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _errorTrace, value);
     }
 
-    public ObservableCollection<string> Branches { get; } = new() { "Release", "Pre-Release" };
+    // Branch collection moved to GameControlViewModel
     
     // News
     public ObservableCollection<NewsItemResponse> News { get; } = new();
@@ -213,11 +239,7 @@ public class MainViewModel : ReactiveObject
     }
 
     // Commands
-    public ReactiveCommand<Unit, Unit> LaunchCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenFolderCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleModsCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleProfileEditorCommand { get; }
+    // MOVED many commands to partial VMs
     public ReactiveCommand<Unit, Unit> RefreshNewsCommand { get; }
     public ReactiveCommand<string, Unit> OpenNewsLinkCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseErrorModalCommand { get; }
@@ -230,14 +252,10 @@ public class MainViewModel : ReactiveObject
         LoadingViewModel = new LoadingViewModel();
         
         AppService = new AppService();
-        _nick = AppService.Configuration.Nick;
+        // Nick initialization moved to HeaderViewModel
         
         // Initialize reactive localization properties
-        var loc = LocalizationService.Instance;
-        AppVersion = loc.GetObservable("app.version");
-        MainEducational = loc.GetObservable("main.educational");
-        MainBuyIt = loc.GetObservable("main.buyIt");
-        MainPlay = loc.GetObservable("main.play");
+        // Moved to child VMs (AppVersion -> Header, Play -> Control)
         
         // Output properties
         _isOverlayOpen = this.WhenAnyValue(
@@ -247,6 +265,32 @@ public class MainViewModel : ReactiveObject
                 x => x.IsErrorModalOpen,
                 (s, m, p, e) => s || m || p || e)
             .ToProperty(this, x => x.IsOverlayOpen);
+            
+        // Setup Partial ViewModels Actions
+        Action toggleSettingsAction = () => 
+        {
+            IsSettingsOpen = !IsSettingsOpen;
+        };
+
+        Action toggleProfileEditorAction = () =>
+        {
+             _ = ToggleProfileEditorAsync();
+        };
+        
+        Action<string, int> toggleModsAction = (branchName, version) =>
+        {
+            if (!IsModsOpen)
+            {
+                var branch = branchName?.ToLower().Replace(" ", "-") ?? "release"; 
+                ModManagerViewModel = new ModManagerViewModel(AppService, branch, version);
+                ModManagerViewModel.CloseCommand.Subscribe(_ => IsModsOpen = false);
+            }
+            IsModsOpen = !IsModsOpen;
+        };
+        
+        // Initialize Child ViewModels
+        HeaderViewModel = new HeaderViewModel(AppService, toggleProfileEditorAction, toggleSettingsAction);
+        GameControlViewModel = new GameControlViewModel(AppService, toggleModsAction, LaunchAsync);
         
         // Initialize child VMs
         SettingsViewModel = new SettingsViewModel(AppService);
@@ -255,59 +299,6 @@ public class MainViewModel : ReactiveObject
         NewsViewModel = new NewsViewModel(AppService);
 
         // Commands
-        LaunchCommand = ReactiveCommand.CreateFromTask(LaunchAsync);
-        OpenFolderCommand = ReactiveCommand.Create(() => 
-        {
-            var branch = SelectedBranch?.ToLower().Replace(" ", "-") ?? "release";
-            AppService.OpenInstanceFolder(branch, SelectedVersion);
-        });
-        
-        ToggleSettingsCommand = ReactiveCommand.Create(() => 
-        {
-            IsSettingsOpen = !IsSettingsOpen;
-            if (IsSettingsOpen)
-            {
-                IsModsOpen = false;
-                IsProfileEditorOpen = false;
-            }
-        });
-        
-        ToggleModsCommand = ReactiveCommand.Create(() => 
-        {
-            if (!IsModsOpen)
-            {
-                var branch = SelectedBranch?.ToLower().Replace(" ", "-") ?? "release"; 
-                ModManagerViewModel = new ModManagerViewModel(AppService, branch, SelectedVersion);
-                ModManagerViewModel.CloseCommand.Subscribe(_ => IsModsOpen = false);
-            }
-            IsModsOpen = !IsModsOpen;
-            if (IsModsOpen)
-            {
-                IsSettingsOpen = false;
-                IsProfileEditorOpen = false;
-            }
-        });
-        
-        ToggleProfileEditorCommand = ReactiveCommand.CreateFromTask(async () => 
-        {
-            if (!IsProfileEditorOpen)
-            {
-                ProfileEditorViewModel = new ProfileEditorViewModel(AppService);
-                // Close command handling
-                var closeCmd = ProfileEditorViewModel.CloseCommand as ReactiveCommand<Unit, Unit>;
-                closeCmd?.Subscribe(_ => IsProfileEditorOpen = false);
-                // Profile update handling
-                ProfileEditorViewModel.ProfileUpdated += () => Nick = AppService.Configuration.Nick;
-                await ProfileEditorViewModel.LoadProfileAsync();
-            }
-            IsProfileEditorOpen = !IsProfileEditorOpen;
-            if (IsProfileEditorOpen)
-            {
-                IsSettingsOpen = false;
-                IsModsOpen = false;
-            }
-        });
-        
         RefreshNewsCommand = ReactiveCommand.CreateFromTask(LoadNewsAsync);
         OpenNewsLinkCommand = ReactiveCommand.Create<string>(url => 
         {
@@ -330,10 +321,11 @@ public class MainViewModel : ReactiveObject
         {
             IsErrorModalOpen = false;
         });
+        
         CopyErrorCommand = ReactiveCommand.Create(() =>
         {
             var errorText = $"Error: {ErrorTitle}\nMessage: {ErrorMessage}\nTrace:\n{ErrorTrace}";
-            // TODO: Copy to clipboard (Avalonia clipboard API)
+            // TODO: Copy to clipboard
             return Unit.Default;
         });
         
@@ -352,6 +344,22 @@ public class MainViewModel : ReactiveObject
         // Initialize application data asynchronously
         _ = InitializeAsync();
     }
+    
+    private async Task ToggleProfileEditorAsync()
+    {
+        if (!IsProfileEditorOpen)
+        {
+            ProfileEditorViewModel = new ProfileEditorViewModel(AppService);
+            // Close command handling
+            var closeCmd = ProfileEditorViewModel.CloseCommand as ReactiveCommand<Unit, Unit>;
+            closeCmd?.Subscribe(_ => IsProfileEditorOpen = false);
+            // Profile update handling
+            ProfileEditorViewModel.ProfileUpdated += () => HeaderViewModel.RefreshNick();
+            await ProfileEditorViewModel.LoadProfileAsync();
+        }
+        IsProfileEditorOpen = !IsProfileEditorOpen;
+    }
+
     
     private async Task InitializeAsync()
     {
