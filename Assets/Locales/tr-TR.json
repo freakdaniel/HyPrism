@@ -26,6 +26,7 @@
     "profile": {
       "title": "Profilim",
       "avatar": "Avatar",
+      "uploadSkin": "Upload Skin",
       "displayName": "Görünen Ad",
       "displayNameHint": "Oyundaki adınız (1-16 karakter).",
       "uuid": "UUID",

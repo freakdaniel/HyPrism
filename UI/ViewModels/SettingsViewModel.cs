@@ -21,6 +21,7 @@ public class LanguageItem
 {
     public string Code { get; set; } = "";
     public string DisplayName { get; set; } = "";
+    public string FlagIconPath { get; set; } = "";
 }
 
 public class SettingsViewModel : ReactiveObject
@@ -40,6 +41,40 @@ public class SettingsViewModel : ReactiveObject
     public IObservable<string> Data { get; }
     public IObservable<string> Instances { get; }
     public IObservable<string> About { get; }
+    
+    // Tab Contents
+    // Profile
+    public IObservable<string> ProfileHeader { get; }
+    public IObservable<string> ProfileAvatar { get; }
+    public IObservable<string> ProfileUploadSkin { get; }
+    public IObservable<string> ProfileDisplayName { get; }
+    public IObservable<string> ProfileDisplayNameHint { get; }
+    public IObservable<string> ProfileUuid { get; }
+    public IObservable<string> ProfileUuidWarning { get; }
+
+    // General
+    public IObservable<string> GeneralHeader { get; }
+    public IObservable<string> GeneralLauncherStorage { get; }
+    public IObservable<string> GeneralBrowse { get; }
+    public IObservable<string> GeneralLauncherStorageHint { get; }
+    public IObservable<string> GeneralUpdateChannel { get; }
+    public IObservable<string> GeneralUpdateChannelHint { get; }
+    public IObservable<string> GeneralCloseLauncher { get; }
+    public IObservable<string> GeneralCloseLauncherHint { get; }
+    public IObservable<string> GeneralDisableNews { get; }
+    public IObservable<string> GeneralDisableNewsHint { get; }
+    
+    // Visual
+    public IObservable<string> VisualHeader { get; }
+    public IObservable<string> VisualAccentColor { get; }
+    public IObservable<string> VisualAccentColorHint { get; }
+    public IObservable<string> VisualBackground { get; }
+    public IObservable<string> VisualBackgroundHint { get; }
+    
+    // Language
+    public IObservable<string> LanguageHeader { get; }
+    public IObservable<string> LanguageInterface { get; }
+    public IObservable<string> LanguageInterfaceHint { get; }
 
     // Tabs
     private string _activeTab = "profile";
@@ -108,11 +143,12 @@ public class SettingsViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _launcherDataDirectory, value);
     }
     
-    public List<BranchItem> BranchItems { get; } = new()
+    private List<BranchItem> _branchItems = new();
+    public List<BranchItem> BranchItems
     {
-        new BranchItem { DisplayName = "Stable (Recommended)", Value = "release" },
-        new BranchItem { DisplayName = "Beta (Experimental)", Value = "beta" }
-    };
+        get => _branchItems;
+        set => this.RaiseAndSetIfChanged(ref _branchItems, value);
+    }
     
     private BranchItem? _selectedBranchItem;
     public BranchItem? SelectedBranchItem
@@ -120,8 +156,11 @@ public class SettingsViewModel : ReactiveObject
         get => _selectedBranchItem;
         set
         {
+            var old = _selectedBranchItem;
             this.RaiseAndSetIfChanged(ref _selectedBranchItem, value);
-            if (value != null)
+            
+            // Only update service if value actually changed (ignores object reference changes due to translation updates)
+            if (value != null && (old == null || old.Value != value.Value))
             {
                 _settingsService.SetLauncherBranch(value.Value);
             }
@@ -173,10 +212,74 @@ public class SettingsViewModel : ReactiveObject
         Data = loc.GetObservable("settings.data");
         Instances = loc.GetObservable("settings.instances");
         About = loc.GetObservable("settings.about");
+
+        // Profile
+        ProfileHeader = loc.GetObservable("settings.profile.title");
+        ProfileAvatar = loc.GetObservable("settings.profile.avatar");
+        ProfileUploadSkin = loc.GetObservable("settings.profile.uploadSkin");
+        ProfileDisplayName = loc.GetObservable("settings.profile.displayName");
+        ProfileDisplayNameHint = loc.GetObservable("settings.profile.displayNameHint");
+        ProfileUuid = loc.GetObservable("settings.profile.uuid");
+        ProfileUuidWarning = loc.GetObservable("settings.profile.uuidWarning");
+
+        // General
+        GeneralHeader = loc.GetObservable("settings.generalSettings.title");
+        GeneralLauncherStorage = loc.GetObservable("settings.generalSettings.launcherStorage");
+        GeneralBrowse = loc.GetObservable("settings.browse");
+        GeneralLauncherStorageHint = loc.GetObservable("settings.generalSettings.launcherStorageHint");
+        GeneralUpdateChannel = loc.GetObservable("settings.generalSettings.updateChannel");
+        GeneralUpdateChannelHint = loc.GetObservable("settings.generalSettings.updateChannelHint");
+        GeneralCloseLauncher = loc.GetObservable("settings.generalSettings.closeLauncher");
+        GeneralCloseLauncherHint = loc.GetObservable("settings.generalSettings.closeLauncherHint");
+        GeneralDisableNews = loc.GetObservable("settings.generalSettings.disableNews");
+        GeneralDisableNewsHint = loc.GetObservable("settings.generalSettings.disableNewsHint");
+        
+        // Visual
+        VisualHeader = loc.GetObservable("settings.visualSettings.title");
+        VisualAccentColor = loc.GetObservable("settings.visualSettings.accentColor");
+        VisualAccentColorHint = loc.GetObservable("settings.visualSettings.accentColorHint");
+        VisualBackground = loc.GetObservable("settings.visualSettings.background");
+        VisualBackgroundHint = loc.GetObservable("settings.visualSettings.backgroundHint");
+        
+        // Language
+        LanguageHeader = loc.GetObservable("settings.languageSettings.title");
+        LanguageInterface = loc.GetObservable("settings.languageSettings.interfaceLanguage");
+        LanguageInterfaceHint = loc.GetObservable("settings.languageSettings.interfaceLanguageHint");
+
+        // Update branch items when language changes
+        Observable.CombineLatest(
+            loc.GetObservable("settings.generalSettings.updateChannelStable"),
+            loc.GetObservable("settings.generalSettings.updateChannelBeta"),
+            (stable, beta) => new List<BranchItem>
+            {
+                new BranchItem { DisplayName = stable, Value = "release" },
+                new BranchItem { DisplayName = beta, Value = "beta" }
+            })
+            .Subscribe(items =>
+            {
+                BranchItems = items;
+                // Restore selection
+                var current = _settingsService.GetLauncherBranch();
+                SelectedBranchItem = items.FirstOrDefault(x => x.Value == current) ?? items.FirstOrDefault();
+            });
         
         // Initialize language items - load names from locale files
         LanguageItems = LocalizationService.GetAvailableLanguages()
-            .Select(kvp => new LanguageItem { Code = kvp.Key, DisplayName = kvp.Value })
+            .Select(kvp => 
+            {
+                // Derive flag code from locale code (e.g. en-US -> us, ru-RU -> ru)
+                var countryCode = kvp.Key.Contains('-') ? kvp.Key.Split('-')[1].ToLower() : kvp.Key.ToLower();
+                
+                // Edge case handling if needed (e.g. specific overrides), but standard ISO usually works
+                // ja-JP -> jp, ko-KR -> kr, zh-CN -> cn
+                
+                return new LanguageItem 
+                { 
+                    Code = kvp.Key, 
+                    DisplayName = kvp.Value,
+                    FlagIconPath = $"/Assets/Icons/Flags/{countryCode}.svg"
+                };
+            })
             .OrderBy(l => l.DisplayName)
             .ToList();
         

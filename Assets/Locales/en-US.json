@@ -26,6 +26,7 @@
     "profile": {
       "title": "My Profile",
       "avatar": "Avatar",
+      "uploadSkin": "Upload Skin",
       "displayName": "Display Name",
       "displayNameHint": "This name will be shown in game (1-16 characters).",
       "uuid": "UUID",

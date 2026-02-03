@@ -13,7 +13,7 @@
     "buyIt": "KAUF ES"
   },
   "settings": {
-    "title": "Einstellungen",
+    "title": "Optionen",
     "myProfile": "Mein Profil",
     "general": "Allgemein",
     "visuals": "Design",
@@ -26,6 +26,7 @@
     "profile": {
       "title": "Mein Profil",
       "avatar": "Avatar",
+      "uploadSkin": "Upload Skin",
       "displayName": "Anzeigename",
       "displayNameHint": "Name im Spiel (1-16 Zeichen).",
       "uuid": "UUID",

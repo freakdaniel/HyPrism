@@ -26,6 +26,7 @@
     "profile": {
       "title": "プロフィール",
       "avatar": "アバター",
+      "uploadSkin": "Upload Skin",
       "displayName": "表示名",
       "displayNameHint": "ゲーム内での名前 (1-16文字)。",
       "uuid": "UUID",

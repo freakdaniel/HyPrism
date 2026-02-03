@@ -234,7 +234,28 @@ public class LocalizationService : ReactiveObject
     
     public string Translate(string key, params object[] args)
     {
-        if (_translations.TryGetValue(key, out var translation))
+        string? translation = null;
+        
+        // Try current language
+        if (_translations.TryGetValue(key, out var val))
+        {
+            translation = val;
+        }
+        // Fallback to English if missing
+        else if (_currentLanguage != "en-US")
+        {
+            // Safe access to cache? We should probably lock or rely on the fact that en-US is loaded early
+            // Locking is safer.
+            lock (_languageCache)
+            {
+                if (_languageCache.TryGetValue("en-US", out var enDict) && enDict.TryGetValue(key, out var enVal))
+                {
+                    translation = enVal;
+                }
+            }
+        }
+
+        if (translation != null)
         {
             // Simple placeholder replacement {0}, {1}, etc.
             if (args.Length > 0)

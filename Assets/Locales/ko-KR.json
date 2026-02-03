@@ -26,6 +26,7 @@
     "profile": {
       "title": "내 프로필",
       "avatar": "아바타",
+      "uploadSkin": "Upload Skin",
       "displayName": "표시 이름",
       "displayNameHint": "게임 내 이름 (1-16자).",
       "uuid": "UUID",

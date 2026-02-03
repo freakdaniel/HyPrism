@@ -129,26 +129,14 @@
 
             <!-- Content Area -->
             <Grid Grid.Column="1" Background="#1E1E1E">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="60"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Header / Close -->
-                <Grid Grid.Row="0">
-                    <buttons:CloseButton Command="{Binding CloseCommand}"
-                                         HorizontalAlignment="Right"
-                                         VerticalAlignment="Top"
-                                         Margin="20,20,20,0"/>
-                </Grid>
                 
                 <!-- Tab Contents -->
-                <ScrollViewer Grid.Row="1" Padding="30,0,30,30">
+                <ScrollViewer Padding="30,30,30,30">
                     <Panel>
                         
                         <!-- Profile Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=profile}" Spacing="25">
-                            <TextBlock Text="My Profile" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=profile}" Spacing="30">
+                            <TextBlock Text="{Binding ProfileHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <!-- Avatar Section -->
                             <Border Background="#252525" CornerRadius="12" Padding="20">
@@ -157,21 +145,21 @@
                                         <TextBlock Text=":)" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="30" FontWeight="Bold"/>
                                     </Border>
                                     <StackPanel VerticalAlignment="Center" Spacing="5">
-                                        <TextBlock Text="Avatar" FontWeight="Bold" Foreground="White"/>
-                                        <Button Content="Upload Skin" Background="#404040" Foreground="White" CornerRadius="6" Padding="15,8"/>
+                                        <TextBlock Text="{Binding ProfileAvatar^}" FontWeight="Bold" Foreground="White"/>
+                                        <Button Content="{Binding ProfileUploadSkin^}" Background="#404040" Foreground="White" CornerRadius="6" Padding="15,8"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
                             <!-- Nickname -->
                             <StackPanel Spacing="8">
-                                <inputs:ActionInput Label="Display Name" Text="{Binding Nick}" MaxLength="16"/>
-                                <TextBlock Text="This name will be shown in game (1-16 characters)." FontSize="12" Foreground="Gray"/>
+                                <inputs:ActionInput Label="{Binding ProfileDisplayName^}" Text="{Binding Nick}" MaxLength="16"/>
+                                <TextBlock Text="{Binding ProfileDisplayNameHint^}" FontSize="12" Foreground="Gray"/>
                             </StackPanel>
                             
                             <!-- UUID -->
                             <StackPanel Spacing="8">
-                                <inputs:ActionInput Label="UUID" Text="{Binding UUID}">
+                                <inputs:ActionInput Label="{Binding ProfileUuid^}" Text="{Binding UUID}">
                                     <inputs:ActionInput.RightContent>
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <Button Command="{Binding CopyUuidCommand}" 
@@ -193,17 +181,17 @@
                                         </StackPanel>
                                     </inputs:ActionInput.RightContent>
                                 </inputs:ActionInput>
-                                <TextBlock Text="Your unique identifier for multiplayer. Changing this will reset your skin!" FontSize="12" Foreground="Orange"/>
+                                <TextBlock Text="{Binding ProfileUuidWarning^}" FontSize="12" Foreground="Orange"/>
                             </StackPanel>
                         </StackPanel>
                         
                         <!-- General Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=general}" Spacing="25">
-                            <TextBlock Text="General Settings" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=general}" Spacing="30">
+                            <TextBlock Text="{Binding GeneralHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <!-- Launcher Storage -->
                             <StackPanel Spacing="8">
-                                <inputs:ActionInput Label="Launcher Storage" Text="{Binding LauncherDataDirectory}" IsReadOnly="True">
+                                <inputs:ActionInput Label="{Binding GeneralLauncherStorage^}" Text="{Binding LauncherDataDirectory}" IsReadOnly="True">
                                     <inputs:ActionInput.RightContent>
                                         <Button Command="{Binding BrowseLauncherDataCommand}" 
                                                 Background="#404040" 
@@ -212,32 +200,26 @@
                                                 Padding="12,8">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <svg:Svg Path="/Assets/Icons/hard-drive.svg" Width="16" Height="16"/>
-                                                <TextBlock Text="Browse" VerticalAlignment="Center" FontSize="13"/>
+                                                <TextBlock Text="{Binding GeneralBrowse^}" VerticalAlignment="Center" FontSize="13"/>
                                             </StackPanel>
                                         </Button>
                                     </inputs:ActionInput.RightContent>
                                 </inputs:ActionInput>
-                                <TextBlock Text="Location where launcher data and game files are stored." FontSize="12" Foreground="Gray"/>
+                                <TextBlock Text="{Binding GeneralLauncherStorageHint^}" FontSize="12" Foreground="Gray"/>
                             </StackPanel>
                             
                             <!-- Update Channel -->
                             <StackPanel Spacing="8">
-                                <TextBlock Text="Update Channel" FontWeight="Medium" Foreground="#CCCCCC"/>
-                                <ComboBox SelectedItem="{Binding SelectedBranchItem}" 
-                                          ItemsSource="{Binding BranchItems}"
-                                          Background="#252525" 
-                                          Foreground="White" 
-                                          BorderThickness="0" 
-                                          CornerRadius="8" 
-                                          Padding="15" 
-                                          FontSize="14">
-                                    <ComboBox.ItemTemplate>
+                                <inputs:SelectionInput Label="{Binding GeneralUpdateChannel^}" 
+                                                       ItemsSource="{Binding BranchItems}"
+                                                       SelectedItem="{Binding SelectedBranchItem}">
+                                    <inputs:SelectionInput.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayName}"/>
                                         </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Text="You will receive stable releases only." FontSize="12" Foreground="Gray"/>
+                                    </inputs:SelectionInput.ItemTemplate>
+                                </inputs:SelectionInput>
+                                <TextBlock Text="{Binding GeneralUpdateChannelHint^}" FontSize="12" Foreground="Gray"/>
                             </StackPanel>
                             
                             <!-- Toggles -->
@@ -245,8 +227,8 @@
                                 <StackPanel Spacing="20">
                                     <Grid ColumnDefinitions="*, Auto">
                                         <StackPanel Grid.Column="0" Spacing="5">
-                                            <TextBlock Text="Close Launcher" FontWeight="Bold" Foreground="White"/>
-                                            <TextBlock Text="Close the launcher automatically when the game starts." FontSize="13" Foreground="Gray" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding GeneralCloseLauncher^}" FontWeight="Bold" Foreground="White"/>
+                                            <TextBlock Text="{Binding GeneralCloseLauncherHint^}" FontSize="13" Foreground="Gray" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseAfterLaunch}" OnContent="" OffContent="" Background="#333"/>
                                     </Grid>
@@ -255,8 +237,8 @@
                                     
                                     <Grid ColumnDefinitions="*, Auto">
                                         <StackPanel Grid.Column="0" Spacing="5">
-                                            <TextBlock Text="Disable News" FontWeight="Bold" Foreground="White"/>
-                                            <TextBlock Text="Hide the news feed from the main menu." FontSize="13" Foreground="Gray" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding GeneralDisableNews^}" FontWeight="Bold" Foreground="White"/>
+                                            <TextBlock Text="{Binding GeneralDisableNewsHint^}" FontSize="13" Foreground="Gray" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding DisableNews}" OnContent="" OffContent="" Background="#333"/>
                                     </Grid>
@@ -265,41 +247,45 @@
                         </StackPanel>
                         
                         <!-- Visual Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=visual}" Spacing="25">
-                            <TextBlock Text="Visual Settings" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=visual}" Spacing="30">
+                            <TextBlock Text="{Binding VisualHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <!-- Accent Color (Placeholder) -->
                             <StackPanel Spacing="8">
-                                <TextBlock Text="Accent Color" FontWeight="Medium" Foreground="#CCCCCC"/>
-                                <TextBlock Text="Theme customization will be available soon." FontSize="13" Foreground="Gray"/>
+                                <TextBlock Text="{Binding VisualAccentColor^}" FontWeight="Medium" Foreground="#CCCCCC"/>
+                                <TextBlock Text="{Binding VisualAccentColorHint^}" FontSize="13" Foreground="Gray"/>
                             </StackPanel>
                             
                             <!-- Background (Placeholder) -->
                             <StackPanel Spacing="8">
-                                <TextBlock Text="Background" FontWeight="Medium" Foreground="#CCCCCC"/>
-                                <TextBlock Text="Background customization will be available soon." FontSize="13" Foreground="Gray"/>
+                                <TextBlock Text="{Binding VisualBackground^}" FontWeight="Medium" Foreground="#CCCCCC"/>
+                                <TextBlock Text="{Binding VisualBackgroundHint^}" FontSize="13" Foreground="Gray"/>
                             </StackPanel>
                         </StackPanel>
                         
                         <!-- Language Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=language}" Spacing="25">
-                            <TextBlock Text="Language Settings" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=language}" Spacing="30">
+                            <TextBlock Text="{Binding LanguageHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <StackPanel Spacing="8">
-                                <TextBlock Text="Interface Language" FontWeight="Medium" Foreground="#CCCCCC"/>
-                                <TextBlock Text="Select your preferred language for the launcher interface" FontSize="13" Foreground="Gray"/>
-                                
-                                <ComboBox ItemsSource="{Binding LanguageItems}"
-                                          SelectedItem="{Binding SelectedLanguageItem}"
-                                          Width="250"
-                                          HorizontalAlignment="Left"
-                                          Margin="0,8,0,0">
-                                    <ComboBox.ItemTemplate>
+                                <inputs:SelectionInput Label="{Binding LanguageInterface^}" 
+                                                       ItemsSource="{Binding LanguageItems}"
+                                                       SelectedItem="{Binding SelectedLanguageItem}"
+                                                       Width="300"
+                                                       HorizontalAlignment="Left">
+                                    <inputs:SelectionInput.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding DisplayName}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <Border CornerRadius="2" ClipToBounds="True" VerticalAlignment="Center">
+                                                     <!-- Reset CSS to avoid global stroke/fill overrides for flags -->
+                                                     <svg:Svg Path="{Binding FlagIconPath}" Width="22" Height="16" Css=""/>
+                                                </Border>
+                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                                            </StackPanel>
                                         </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                    </inputs:SelectionInput.ItemTemplate>
+                                </inputs:SelectionInput>
+                                <TextBlock Text="{Binding LanguageInterfaceHint^}" FontSize="13" Foreground="Gray"/>
                                 
                                 <TextBlock Text="Note: Some text may remain in English until full localization is complete." 
                                            FontSize="12" 
@@ -312,7 +298,7 @@
                         </StackPanel>
                         
                         <!-- Data Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=data}" Spacing="25">
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=data}" Spacing="30">
                             <TextBlock Text="Data Management" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <StackPanel Spacing="8">
@@ -322,7 +308,7 @@
                         </StackPanel>
                         
                         <!-- Instances Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=instances}" Spacing="25">
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=instances}" Spacing="30">
                             <TextBlock Text="Instance Management" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <StackPanel Spacing="8">
@@ -332,7 +318,7 @@
                         </StackPanel>
                         
                         <!-- About Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=about}" Spacing="25">
+                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=about}" Spacing="30">
                             <TextBlock Text="About HyPrism" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
                             <Border Background="#252525" CornerRadius="12" Padding="20">
@@ -347,6 +333,12 @@
 
                     </Panel>
                 </ScrollViewer>
+                
+                <!-- Header / Close -->
+                <buttons:CloseButton Command="{Binding CloseCommand}"
+                                     HorizontalAlignment="Right"
+                                     VerticalAlignment="Top"
+                                     Margin="20,20,20,0"/>
             </Grid>
         </Grid>
     </Border>

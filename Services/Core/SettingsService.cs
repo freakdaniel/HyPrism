@@ -62,6 +62,12 @@ public class SettingsService
         {
             normalizedBranch = "release";
         }
+        
+        if (_configService.Configuration.LauncherBranch == normalizedBranch)
+        {
+            return false;
+        }
+        
         _configService.Configuration.LauncherBranch = normalizedBranch;
         _configService.SaveConfig();
         Logger.Info("Config", $"Launcher branch set to: {normalizedBranch}");

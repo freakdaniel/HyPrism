@@ -13,7 +13,7 @@
     "buyIt": "КУПИ ÏЇ"
   },
   "settings": {
-    "title": "Налаштування",
+    "title": "Параметри",
     "myProfile": "Мій профіль",
     "general": "Загальні",
     "visuals": "Вигляд",
@@ -26,6 +26,7 @@
     "profile": {
       "title": "Мій профіль",
       "avatar": "Аватар",
+      "uploadSkin": "Upload Skin",
       "displayName": "Нікнейм",
       "displayNameHint": "Ім'я в грі (1-16 символів).",
       "uuid": "UUID",

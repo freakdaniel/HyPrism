@@ -26,6 +26,7 @@
     "profile": {
       "title": "Мой профиль",
       "avatar": "Аватар",
+      "uploadSkin": "Загрузить скин",
       "displayName": "Никнейм",
       "displayNameHint": "Имя в игре (1-16 символов).",
       "uuid": "UUID",
@@ -49,9 +50,9 @@
     "visualSettings": {
       "title": "Визуальные настройки",
       "accentColor": "Цвет акцента",
-      "accentColorHint": "Скоро.",
+      "accentColorHint": "Настройка темы будет доступна скоро.",
       "background": "Фон",
-      "backgroundHint": "Скоро."
+      "backgroundHint": "Настройка фона будет доступна скоро."
     },
     "languageSettings": {
       "title": "Настройки языка",

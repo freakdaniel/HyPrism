@@ -13,7 +13,7 @@
     "buyIt": "COMPRE"
   },
   "settings": {
-    "title": "Configurações",
+    "title": "Configurar",
     "myProfile": "Meu Perfil",
     "general": "Geral",
     "visuals": "Visual",
@@ -26,6 +26,7 @@
     "profile": {
       "title": "Meu Perfil",
       "avatar": "Avatar",
+      "uploadSkin": "Upload Skin",
       "displayName": "Nome",
       "displayNameHint": "Nome no jogo (1-16 car.).",
       "uuid": "UUID",
