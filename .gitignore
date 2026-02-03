@@ -27,7 +27,7 @@ obj/
 frontend/node_modules/
 frontend/dist/
 wwwroot/
-packaging/flatpak/bundle
+Packaging/flatpak/bundle
 
 # IMPORTANT folder (backup)
 IMPORTANT/

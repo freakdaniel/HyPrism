@@ -64,7 +64,7 @@ jobs:
 
       - name: Generate Linux bundle via script
         run: |
-          ./scripts/build-linux.sh --auto-install-deps --only-bundle
+          ./Scripts/build-linux.sh --auto-install-deps --only-bundle
 
       - name: Normalize Linux tarballs
         run: |
@@ -82,7 +82,7 @@ jobs:
         with:
           name: linux-bundle
           path: |
-            packaging/flatpak/bundle/**
+            Packaging/flatpak/bundle/**
             artifacts/linux-x64/portable/**
             artifacts/HyPrism-linux-x64.tar.gz
             artifacts/HyPrism-linux-arm64.tar.gz
@@ -111,7 +111,7 @@ jobs:
 
       - name: Build AppImage via script
         run: |
-          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-appimage
+          SKIP_BUILD=1 ./Scripts/build-linux.sh --auto-install-deps --only-appimage
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
@@ -133,7 +133,7 @@ jobs:
 
       - name: Build Flatpak via script
         run: |
-          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-flatpak
+          SKIP_BUILD=1 ./Scripts/build-linux.sh --auto-install-deps --only-flatpak
 
       - name: Upload Flatpak artifact
         uses: actions/upload-artifact@v4
@@ -177,7 +177,7 @@ jobs:
 
       - name: Build deb/rpm via script
         run: |
-          SKIP_BUILD=1 ./scripts/build-linux.sh --auto-install-deps --only-deb-rpm
+          SKIP_BUILD=1 ./Scripts/build-linux.sh --auto-install-deps --only-deb-rpm
 
       - name: Upload deb/rpm artifacts
         uses: actions/upload-artifact@v4
@@ -216,7 +216,7 @@ jobs:
             /p:IncludeNativeLibrariesForSelfExtract=true `
             /p:IncludeAllContentForSelfExtract=true `
             /p:OutputType=WinExe /p:ApplicationManifest=app.manifest `
-            /p:ApplicationIcon=packaging/windows/HyPrism.ico `
+            /p:ApplicationIcon=Packaging/windows/HyPrism.ico `
             -o artifacts/win-x64
 
       - name: Rename Windows exe for release
@@ -280,8 +280,8 @@ jobs:
             cp "artifacts/HyPrism.app/Contents/MacOS/jre.json" "artifacts/HyPrism.app/Contents/Resources/"
           fi
           
-          cp packaging/macos/Info.plist "artifacts/HyPrism.app/Contents/"
-          cp packaging/macos/HyPrism.icns "artifacts/HyPrism.app/Contents/Resources/"
+          cp Packaging/macos/Info.plist "artifacts/HyPrism.app/Contents/"
+          cp Packaging/macos/HyPrism.icns "artifacts/HyPrism.app/Contents/Resources/"
           chmod +x "artifacts/HyPrism.app/Contents/MacOS/HyPrism"
           echo "APPL????" > "artifacts/HyPrism.app/Contents/PkgInfo"
 

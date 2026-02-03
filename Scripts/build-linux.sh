@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cat << "EOF"
+
+.-..-.      .---.       _                
+: :; :      : .; :     :_;               
+:    :.-..-.:  _.'.--. .-. .--. ,-.,-.,-.
+: :: :: :; :: :   : ..': :`._-.': ,. ,. :
+:_;:_;`._. ;:_;   :_;  :_;`.__.':_;:_;:_;
+       .-. :                             
+       `._.'           linux build script
+
+EOF
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${VERSION:-2.0.0}"
 ARTIFACTS="$ROOT/artifacts"
@@ -14,7 +26,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 
 show_help() {
   cat <<'EOF'
-Usage: ./$0 [options]
+Usage: ./build-linux.sh [options]
 
 Options:
   --help                Show this help message and exit
@@ -135,7 +147,9 @@ if [[ "$(uname -s)" == "Linux" ]]; then
         eval "$post_install" || true
       fi
     else
-      echo "!! Missing $cmd. Install: $ubuntu_pkgs (Ubuntu) or $fedora_pkgs (Fedora). Use --auto-install-deps to auto-install."
+      echo "ERROR: Missing $cmd. Install it first or use --auto-install-deps option"
+      echo "       - Ubuntu/Debian: $ubuntu_pkgs"
+      echo "       - Fedora: $fedora_pkgs"
     fi
     return 1
   }
@@ -152,10 +166,13 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # Packaging helpers often missing on fresh VMs
   if [[ "$ONLY_BUNDLE" != "1" ]]; then
     if [[ "$DO_DEB" == "1" ]]; then
+      # fpm requires ruby, ruby-dev, rubygems, build-essential (make/gcc), and rpm (for rpm build)
       require_tool fpm "ruby ruby-dev rubygems build-essential rpm" "ruby ruby-devel rubygems @development-tools rpm-build" "command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm"
     fi
     if [[ "$DO_APPIMAGE" == "1" ]]; then
-      require_tool appimagetool "appimagetool" "appimagetool" "command -v appimagetool >/dev/null 2>&1 || { sudo apt-get update -y || true; sudo apt-get install -y libfuse2 || true; curl -fsSL -o /tmp/appimagetool \"https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage\"; chmod +x /tmp/appimagetool; sudo mv /tmp/appimagetool /usr/local/bin/appimagetool; }"
+      # Dependencies: appimagetool (pre-built binary), libfuse2, file
+      # Note: older ubuntu needs libfuse2 specifically for appimagetool to run
+      require_tool appimagetool "appimagetool file" "appimagetool file" "command -v appimagetool >/dev/null 2>&1 || { sudo apt-get update -y || true; sudo apt-get install -y libfuse2 file || true; curl -fsSL -o /tmp/appimagetool \"https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage\"; chmod +x /tmp/appimagetool; sudo mv /tmp/appimagetool /usr/local/bin/appimagetool; }"
     fi
     if [[ "$DO_FLATPAK" == "1" ]]; then
       require_tool flatpak-builder "flatpak flatpak-builder" "flatpak flatpak-builder" ""
@@ -180,27 +197,24 @@ mkdir -p "$ARTIFACTS"
 
 if [[ "$SKIP_BUILD" == "1" ]]; then
   echo "==> Skipping frontend + publish (SKIP_BUILD=1)"
-  if [[ -d "$ROOT/packaging/flatpak/bundle" && ! -d "$ARTIFACTS/linux-x64/portable" ]]; then
+  if [[ -d "$ROOT/Packaging/flatpak/bundle" && ! -d "$ARTIFACTS/linux-x64/portable" ]]; then
     mkdir -p "$ARTIFACTS/linux-x64/portable"
-    cp -R "$ROOT/packaging/flatpak/bundle"/* "$ARTIFACTS/linux-x64/portable/" || true
+    cp -R "$ROOT/Packaging/flatpak/bundle"/* "$ARTIFACTS/linux-x64/portable/" || true
   fi
+
 
   if [[ ! -f "$ARTIFACTS/linux-x64/portable/HyPrism" ]]; then
     echo "ERROR: artifacts/linux-x64/portable/HyPrism is missing. Run --only-bundle first or provide bundle." >&2
     exit 1
   fi
 else
-  echo "==> Building frontend"
-  if [[ -f "$ROOT/frontend/package-lock.json" ]]; then
-    # Use CI mode and disable audit/funding prompts to be non-interactive
-    (cd "$ROOT/frontend" && CI=1 npm ci --no-audit --no-fund --silent)
-  else
-    (cd "$ROOT/frontend" && CI=1 npm install --no-audit --no-fund --silent)
+  # Check for dotnet
+  if ! command -v dotnet >/dev/null 2>&1; then
+    echo "ERROR: dotnet is required but not found. Please install .NET SDK." >&2
+    exit 1
   fi
-  # Force non-interactive build and minimal output
-  (cd "$ROOT/frontend" && CI=1 npm run build --silent)
 
-  echo "==> Restoring and publishing backend"
+  echo "==> Restoring and publishing project"
   dotnet restore "$ROOT/HyPrism.csproj"
 
   for rid in "${RIDS[@]}"; do
@@ -227,12 +241,12 @@ fi
 if [[ "$ONLY_BUNDLE" == "1" && "$(uname -s)" == "Linux" ]]; then
   echo "==> Preparing bundle only"
   LINUX_OUT="$ARTIFACTS/linux-x64/portable"
-  rm -rf "$ROOT/packaging/flatpak/bundle"
-  mkdir -p "$ROOT/packaging/flatpak/bundle"
-  cp -R "$LINUX_OUT"/* "$ROOT/packaging/flatpak/bundle/" || true
-  cp "$ROOT/packaging/flatpak/dev.hyprism.HyPrism."* "$ROOT/packaging/flatpak/bundle/" || true
-  chmod +x "$ROOT/packaging/flatpak/bundle/HyPrism" || true
-  echo "Bundle ready at $ROOT/packaging/flatpak/bundle"
+  rm -rf "$ROOT/Packaging/flatpak/bundle"
+  mkdir -p "$ROOT/Packaging/flatpak/bundle"
+  cp -R "$LINUX_OUT"/* "$ROOT/Packaging/flatpak/bundle/" || true
+  cp "$ROOT/Packaging/flatpak/dev.hyprism.HyPrism."* "$ROOT/Packaging/flatpak/bundle/" || true
+  chmod +x "$ROOT/Packaging/flatpak/bundle/HyPrism" || true
+  echo "Bundle ready at $ROOT/Packaging/flatpak/bundle"
   echo "Done. Artifacts in $ARTIFACTS"
   exit 0
 fi
@@ -241,8 +255,8 @@ fi
 if [[ "$(uname -s)" == "Linux" ]]; then
   LINUX_OUT="$ARTIFACTS/linux-x64/portable"
   PKGROOT="$ARTIFACTS/linux-x64/pkgroot"
-  ICON_SRC="$ROOT/packaging/flatpak/dev.hyprism.HyPrism.png"
-  DESKTOP_SRC="$ROOT/packaging/flatpak/dev.hyprism.HyPrism.desktop"
+  ICON_SRC="$ROOT/Packaging/flatpak/dev.hyprism.HyPrism.png"
+  DESKTOP_SRC="$ROOT/Packaging/flatpak/dev.hyprism.HyPrism.desktop"
 
   echo "==> Staging Linux package tree"
   rm -rf "$PKGROOT"
@@ -305,14 +319,14 @@ EOF
     # Use user remotes to avoid system-remote lookups in CI
     flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
     flatpak remote-add --user --if-not-exists flathub-beta https://flathub.org/beta-repo/flathub-beta.flatpakrepo
-    rm -rf "$ROOT/packaging/flatpak/bundle"
-    mkdir -p "$ROOT/packaging/flatpak/bundle"
-    cp -R "$LINUX_OUT"/* "$ROOT/packaging/flatpak/bundle/"
-    cp "$ROOT/packaging/flatpak/dev.hyprism.HyPrism."* "$ROOT/packaging/flatpak/bundle/" || true
-    chmod +x "$ROOT/packaging/flatpak/bundle/HyPrism" || true
+    rm -rf "$ROOT/Packaging/flatpak/bundle"
+    mkdir -p "$ROOT/Packaging/flatpak/bundle"
+    cp -R "$LINUX_OUT"/* "$ROOT/Packaging/flatpak/bundle/"
+    cp "$ROOT/Packaging/flatpak/dev.hyprism.HyPrism."* "$ROOT/Packaging/flatpak/bundle/" || true
+    chmod +x "$ROOT/Packaging/flatpak/bundle/HyPrism" || true
     flatpak-builder --user --force-clean "$FLATPAK_STAGE" \
       --install-deps-from=flathub --install-deps-from=flathub-beta \
-      "$ROOT/packaging/flatpak/dev.hyprism.HyPrism.json" --repo="$FLATPAK_REPO"
+      "$ROOT/Packaging/flatpak/dev.hyprism.HyPrism.json" --repo="$FLATPAK_REPO"
     echo "==> Bundling Flatpak"
     rm -f "$ARTIFACTS/HyPrism-linux-x64.flatpak"
     flatpak build-bundle "$FLATPAK_REPO" "$ARTIFACTS/HyPrism-linux-x64.flatpak" dev.hyprism.HyPrism \
@@ -325,7 +339,7 @@ fi
 # Optional: trigger remote Linux build (e.g., Parallels VM) after local steps
 if [[ -n "$REMOTE_LINUX_HOST" && "$SKIP_REMOTE" != "1" ]]; then
   echo "==> Triggering remote build on $REMOTE_LINUX_HOST ($REMOTE_LINUX_PATH)"
-  ssh -o BatchMode=yes "$REMOTE_LINUX_HOST" "cd '$REMOTE_LINUX_PATH' && SKIP_REMOTE=1 ./scripts/build-all.sh --auto-install-deps" || {
+  ssh -o BatchMode=yes "$REMOTE_LINUX_HOST" "cd '$REMOTE_LINUX_PATH' && SKIP_REMOTE=1 ./Scripts/build-linux.sh --auto-install-deps" || {
     echo "!! Remote build failed on $REMOTE_LINUX_HOST" >&2
     exit 1
   }

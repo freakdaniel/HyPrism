@@ -15,6 +15,23 @@ class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // Print ASCII Logo
+        try
+        {
+            Console.WriteLine("""
+
+ .-..-.      .---.       _                
+ : :; :      : .; :     :_;               
+ :    :.-..-.:  _.'.--. .-. .--. ,-.,-.,-.
+ : :: :: :; :: :   : ..': :`._-.': ,. ,. :
+ :_;:_;`._. ;:_;   :_;  :_;`.__.':_;:_;:_;
+        .-. :                             
+        `._.'                     launcher
+
+""");
+        }
+        catch { /* Ignore if console is not available */ }
+
         // Check for wrapper mode flag
         if (args.Contains("--wrapper"))
         {

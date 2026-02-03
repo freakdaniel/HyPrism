@@ -12,7 +12,7 @@
 
   <!-- Windows-specific settings -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) OR '$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == 'win-arm64'">
-    <ApplicationIcon>packaging/windows/HyPrism.ico</ApplicationIcon>
+    <ApplicationIcon>Packaging/windows/HyPrism.ico</ApplicationIcon>
     <!-- Enable single-file publishing for Windows only -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
