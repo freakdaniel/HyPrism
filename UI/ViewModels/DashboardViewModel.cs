@@ -239,7 +239,7 @@ public class DashboardViewModel : ReactiveObject
 
         // --- Initialize Child ViewModels ---
         HeaderViewModel = new HeaderViewModel(_configService, toggleProfileEditorAction, toggleSettingsAction);
-        GameControlViewModel = new GameControlViewModel(_instanceService, _fileService, toggleModsAction, LaunchAsync);
+        GameControlViewModel = new GameControlViewModel(_instanceService, _fileService, toggleModsAction, toggleSettingsAction, LaunchAsync);
         NewsViewModel = new NewsViewModel(_newsService, _browserService);
         
         // Lazy-load settings if possible, or init straight away

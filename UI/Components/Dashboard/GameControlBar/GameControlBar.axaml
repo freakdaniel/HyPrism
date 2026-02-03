@@ -30,7 +30,8 @@
                             IconSize="24"/>
             
             <!-- Settings -->
-            <btn:IconButton ButtonBackground="#2a2a2a"
+            <btn:IconButton Command="{Binding ToggleSettingsCommand}"
+                            ButtonBackground="#2a2a2a"
                             Width="50" Height="50"
                             IconPath="/Assets/Icons/settings.svg"
                             IconSize="24"/>

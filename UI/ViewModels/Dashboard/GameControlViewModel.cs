@@ -17,6 +17,7 @@ public class GameControlViewModel : ReactiveObject
     // Commands
     public ReactiveCommand<Unit, Unit> ToggleModsCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenFolderCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> LaunchCommand { get; }
 
     // Properties
@@ -45,6 +46,7 @@ public class GameControlViewModel : ReactiveObject
         InstanceService instanceService,
         FileService fileService, 
         Action<string, int> toggleMods, 
+        Action toggleSettings,
         Func<Task> launchAction)
     {
         _instanceService = instanceService;
@@ -56,6 +58,7 @@ public class GameControlViewModel : ReactiveObject
         MainPlay = loc.GetObservable("main.play");
         
         ToggleModsCommand = ReactiveCommand.Create(() => toggleMods(SelectedBranch, SelectedVersion));
+        ToggleSettingsCommand = ReactiveCommand.Create(toggleSettings);
         
         OpenFolderCommand = ReactiveCommand.Create(() =>  
         {

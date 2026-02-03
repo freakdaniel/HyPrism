@@ -77,15 +77,6 @@
                         Width="36" Height="36">
                     <svg:Svg Path="/Assets/Icons/github.svg" Width="20" Height="20"/>
                 </Button>
-                
-                <!-- Settings -->
-                <Button Command="{Binding ToggleSettingsCommand}"
-                        Background="#333" 
-                        Padding="8" 
-                        CornerRadius="6"
-                        Width="36" Height="36">
-                    <svg:Svg Path="/Assets/Icons/settings.svg" Width="20" Height="20"/>
-                </Button>
             </StackPanel>
         </StackPanel>
     </Grid>
