@@ -60,7 +60,10 @@ public static class Bootstrapper
             services.AddSingleton<ModService>(sp =>
                 new ModService(
                     sp.GetRequiredService<HttpClient>(),
-                    sp.GetRequiredService<AppPathConfiguration>().AppDir));
+                    sp.GetRequiredService<AppPathConfiguration>().AppDir,
+                    sp.GetRequiredService<ConfigService>(),
+                    sp.GetRequiredService<InstanceService>(),
+                    sp.GetRequiredService<ProgressNotificationService>()));
                     
             services.AddSingleton<LaunchService>(sp =>
                 new LaunchService(
@@ -87,13 +90,14 @@ public static class Bootstrapper
             services.AddSingleton<FileService>(sp =>
                 new FileService(sp.GetRequiredService<AppPathConfiguration>()));
 
-             services.AddSingleton<UpdateService>(sp =>
+            services.AddSingleton<UpdateService>(sp =>
                 new UpdateService(
                     sp.GetRequiredService<HttpClient>(),
                     sp.GetRequiredService<ConfigService>(),
                     sp.GetRequiredService<VersionService>(),
                     sp.GetRequiredService<InstanceService>(),
-                    sp.GetRequiredService<BrowserService>()));
+                    sp.GetRequiredService<BrowserService>(),
+                    sp.GetRequiredService<ProgressNotificationService>()));
             
             services.AddSingleton<GameSessionService>(sp =>
                 new GameSessionService(
@@ -157,8 +161,7 @@ public static class Bootstrapper
             #region Legacy AppService
 
             // The "God Object" AppService - eventually to be removed
-            services.AddSingleton<AppService>();
-
+            // REFACTORED: AppService removed. ViewModels now inject specific services.
             #endregion
 
             #region ViewModels

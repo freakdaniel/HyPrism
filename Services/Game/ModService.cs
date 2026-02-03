@@ -26,10 +26,22 @@ public class ModService
     // Lock for mod manifest operations to prevent concurrent writes
     private static readonly SemaphoreSlim _modManifestLock = new(1, 1);
 
-    public ModService(HttpClient httpClient, string appDir)
+    private readonly ConfigService _configService;
+    private readonly InstanceService _instanceService;
+    private readonly ProgressNotificationService _progressNotificationService;
+
+    public ModService(
+        HttpClient httpClient, 
+        string appDir,
+        ConfigService configService,
+        InstanceService instanceService,
+        ProgressNotificationService progressNotificationService)
     {
         _httpClient = httpClient;
         _appDir = appDir;
+        _configService = configService;
+        _instanceService = instanceService;
+        _progressNotificationService = progressNotificationService;
     }
 
     /// <summary>
@@ -559,6 +571,79 @@ public class ModService
         {
             Logger.Error("ModService", $"Failed to import mod list: {ex.Message}");
             return 0;
+        }
+    }
+
+    /// <summary>
+    /// Installs a predefined list of optimization mods to the current game instance.
+    /// Optimization mods improve game performance and FPS.
+    /// </summary>
+    public async Task<bool> InstallOptimizationModsAsync()
+    {
+        try
+        {
+            // Predefined list of optimization mod IDs from CurseForge
+            var optimizationModIds = new List<string>
+            {
+                // Example: "sodium", "lithium", "phosphor", "ferritecore", etc.
+            };
+
+            if (optimizationModIds.Count == 0)
+            {
+                Logger.Warning("OptimizationMods", "No optimization mods defined yet - feature is a stub");
+                return false;
+            }
+
+            // Get current game instance path
+            var branch = UtilityService.NormalizeVersionType(_configService.Configuration.VersionType);
+            var instancePath = _instanceService.GetLatestInstancePath(branch);
+            
+            if (!_instanceService.IsClientPresent(instancePath))
+            {
+                Logger.Warning("OptimizationMods", "Game client not installed - cannot install optimization mods");
+                return false;
+            }
+
+            // Install each optimization mod
+            foreach (var modId in optimizationModIds)
+            {
+                try
+                {
+                    // Get latest mod file
+                    var filesResult = await GetModFilesAsync(modId, 1, 10);
+                    if (filesResult.Files.Count == 0) continue;
+
+                    var latestFile = filesResult.Files[0];
+                    
+                    // Install mod to instance
+                    await InstallModFileToInstanceAsync(
+                        modId, 
+                        latestFile.Id.ToString(), 
+                        instancePath,
+                        (stage, msg) => _progressNotificationService.SendProgress(
+                            "optimization-mods", 
+                            0, 
+                            $"Installing {latestFile.DisplayName}: {msg}", 
+                            0, 
+                            100
+                        )
+                    );
+                    
+                    Logger.Success("OptimizationMods", $"Installed optimization mod: {latestFile.DisplayName}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning("OptimizationMods", $"Failed to install mod {modId}: {ex.Message}");
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("OptimizationMods", $"InstallOptimizationModsAsync error: {ex.Message}");
+            _progressNotificationService.SendErrorEvent("Optimization Mods Installation Error", ex.Message, null);
+            return false;
         }
     }
 }

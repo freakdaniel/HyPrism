@@ -17,6 +17,14 @@ public class SettingsService
     public SettingsService(ConfigService configService)
     {
         _configService = configService;
+        
+        // Apply initial language override from config
+        var savedLang = _configService.Configuration.Language;
+        if (!string.IsNullOrEmpty(savedLang))
+        {
+            // Sync singleton state with saved config
+            LocalizationService.Instance.CurrentLanguage = savedLang;
+        }
     }
     
     // ========== Localization Settings (Language) ==========

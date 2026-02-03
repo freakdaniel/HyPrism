@@ -15,7 +15,6 @@ namespace HyPrism.UI.ViewModels;
 
 public class DashboardViewModel : ReactiveObject
 {
-    private readonly AppService _appService;
     private readonly GameSessionService _gameSessionService;
     private readonly ModService _modService;
     private readonly InstanceService _instanceService;
@@ -189,7 +188,6 @@ public class DashboardViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> CopyErrorCommand { get; }
 
     public DashboardViewModel(
-        AppService appService,
         GameSessionService gameSessionService,
         ModService modService,
         InstanceService instanceService,
@@ -203,7 +201,6 @@ public class DashboardViewModel : ReactiveObject
         ProfileService profileService,
         SkinService skinService)
     {
-        _appService = appService;
         _gameSessionService = gameSessionService;
         _modService = modService;
         _instanceService = instanceService;

@@ -164,4 +164,40 @@ public class ConfigService
         _config = new Config();
         SaveConfig();
     }
+
+    public Task<string?> SetInstanceDirectoryAsync(string path)
+    {
+        try
+        {
+            // If path is empty or whitespace, clear the custom instance directory
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                _config.InstanceDirectory = null!;
+                SaveConfig();
+                Logger.Success("Config", "Instance directory cleared, using default");
+                return Task.FromResult<string?>(null);
+            }
+
+            var expanded = Environment.ExpandEnvironmentVariables(path.Trim());
+
+            // If not rooted, combine with app directory (parent of config file)
+            if (!Path.IsPathRooted(expanded))
+            {
+                expanded = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(_configPath)!, expanded));
+            }
+
+            Directory.CreateDirectory(expanded);
+
+            _config.InstanceDirectory = expanded;
+            SaveConfig();
+
+            Logger.Success("Config", $"Instance directory set to {expanded}");
+            return Task.FromResult<string?>(expanded);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Config", $"Failed to set instance directory: {ex.Message}");
+            return Task.FromResult<string?>(null);
+        }
+    }
 }

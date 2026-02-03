@@ -14,7 +14,10 @@ namespace HyPrism.UI.ViewModels;
 public class MainViewModel : ReactiveObject
 {
     private readonly NewsService _newsService;
-    private readonly AppService _appService;
+    private readonly DiscordService _discordService;
+    private readonly ProfileManagementService _profileManagementService;
+    private readonly InstanceService _instanceService;
+    private readonly SkinService _skinService;
 
     // --- Core Architecture ---
     // The Loading Screen is distinct and effectively "covers" the application
@@ -34,7 +37,8 @@ public class MainViewModel : ReactiveObject
     public bool DisableNews => true; // Moved logic to dashboard, stub for init
 
     public MainViewModel(
-        AppService appService,
+        DiscordService discordService,
+        ProfileManagementService profileManagementService,
         // We inject all services to pass them down to the Dashboard
         // Ideally we would use a Factory or DI container resolution for the child, 
         // but passing them is fine for now.
@@ -52,7 +56,10 @@ public class MainViewModel : ReactiveObject
         SkinService skinService)
     {
         _newsService = newsService;
-        _appService = appService; // Keep for now if needed
+        _discordService = discordService;
+        _profileManagementService = profileManagementService;
+        _instanceService = instanceService;
+        _skinService = skinService;
 
         LoadingViewModel = new LoadingViewModel();
         
@@ -68,7 +75,6 @@ public class MainViewModel : ReactiveObject
 
         // Create the Dashboard ViewModel which encapsulates the main app logic
         DashboardViewModel = new DashboardViewModel(
-            appService,
             gameSessionService,
             modService,
             instanceService,
@@ -95,6 +101,12 @@ public class MainViewModel : ReactiveObject
         {
             // Initial delay to let UI render frame
             await Task.Delay(100);
+
+            // Startup Initialization (Formerly in AppService)
+            _skinService.TryRecoverOrphanedSkinOnStartup();
+            _instanceService.MigrateLegacyData();
+            _discordService.Initialize();
+            _profileManagementService.InitializeProfileModsSymlink();
 
             if (LoadingViewModel != null)
             {
