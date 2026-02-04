@@ -8,6 +8,7 @@ using HyPrism.Services;
 using HyPrism.Services.Core;
 using HyPrism.Services.Game;
 using HyPrism.Services.User;
+using HyPrism;
 
 namespace HyPrism.UI.ViewModels;
 
@@ -54,7 +55,8 @@ public class MainViewModel : ReactiveObject
         FileDialogService fileDialogService,
         ProfileService profileService,
         SkinService skinService,
-        GitHubService gitHubService)
+        GitHubService gitHubService,
+        AppPathConfiguration appPathConfiguration)
     {
         _newsService = newsService;
         _discordService = discordService;
@@ -88,7 +90,8 @@ public class MainViewModel : ReactiveObject
             fileDialogService,
             profileService,
             skinService,
-            gitHubService
+            gitHubService,
+            appPathConfiguration
         );
 
         // Start App Initialization sequence

@@ -157,5 +157,37 @@
     "updatesAvailable": "Доступно обновлений: {0}",
     "openModsFolder": "Папка модов",
     "close": "Закрыть"
+  },
+  "launch": {
+    "state": {
+      "preparing": "Подготовка",
+      "download": "Загрузка",
+      "update": "Обновление",
+      "install": "Установка",
+      "patching": "Патчинг",
+      "launching": "Запуск",
+      "complete": "Готово"
+    },
+    "detail": {
+      "preparing_session": "Подготовка сессии...",
+      "checking_install": "Проверка установки...",
+      "game_installed": "Игра уже установлена",
+      "update_check": "Проверка обновлений...",
+      "downloading_patch": "Загрузка патча {0}/{1} ({2}%)",
+      "applying_patch": "Применение патча {0}/{1}...",
+      "patch_applied": "Патч {0} успешно применен",
+      "vc_redist": "Проверка Visual C++ Runtime...",
+      "java_install": "Установка Java Runtime...",
+      "authenticating": "Авторизация через {0}...",
+      "patching_client": "Патчинг клиента...",
+      "patching_server": "Патчинг сервера...",
+      "resigning": "Переподписание бинарников...",
+      "starting_process": "Запуск процесса игры...",
+      "started": "Игра запущена!",
+      "done": "Готово",
+      "butler_install": "Установка Butler...",
+      "downloading_generic": "Загрузка Hytale... {0}%",
+      "installing_butler_pwr": "Установка игры через Butler..."
+    }
   }
 }

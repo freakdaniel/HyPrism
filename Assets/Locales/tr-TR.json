@@ -32,7 +32,8 @@
       "uuid": "UUID",
       "uuidWarning": "Benzersiz ID. Değiştirmek skininizi sıfırlar!",
       "randomize": "Rastgele",
-      "copy": "Kopyala"
+      "copy": "Kopyala",
+      "nameWarning": "Hytale belirli bir takma ad desenine sahiptir. Yalnızca İngilizce karakterleri ve sayıları (0-9) kullanın, özel sembollerden ve boşluklardan kaçının (istisnalar: '-', '_')"
     },
     "generalSettings": {
       "title": "Genel Ayarlar",
@@ -156,5 +157,37 @@
     "updatesAvailable": "{0} güncelleme mevcut:",
     "openModsFolder": "Mod Klasörü",
     "close": "Kapat"
+  },
+  "launch": {
+    "state": {
+      "preparing": "Hazırlanıyor",
+      "download": "İndiriliyor",
+      "update": "Güncelleniyor",
+      "install": "Yükleniyor",
+      "patching": "Yamalanıyor",
+      "launching": "Başlatılıyor",
+      "complete": "Tamamlandı"
+    },
+    "detail": {
+      "preparing_session": "Oyun oturumu hazırlanıyor...",
+      "checking_install": "Kurulum kontrol ediliyor...",
+      "game_installed": "Oyun zaten yüklü",
+      "update_check": "Güncellemeler kontrol ediliyor...",
+      "downloading_patch": "Yama {0}/{1} indiriliyor ({2}%)",
+      "applying_patch": "Yama {0}/{1} uygulanıyor...",
+      "patch_applied": "Yama {0} başarıyla uygulandı",
+      "vc_redist": "Visual C++ Runtime kontrol ediliyor...",
+      "java_install": "Java Runtime yükleniyor...",
+      "authenticating": "{0} ile kimlik doğrulanıyor...",
+      "patching_client": "İstemci ikili dosyası yamalanıyor...",
+      "patching_server": "Sunucu JAR dosyası yamalanıyor...",
+      "resigning": "İkili dosya yeniden imzalanıyor...",
+      "starting_process": "Oyun işlemi başlatılıyor...",
+      "started": "Oyun başladı!",
+      "done": "Bitti",
+      "butler_install": "Butler yükleniyor...",
+      "downloading_generic": "Hytale indiriliyor... {0}%",
+      "installing_butler_pwr": "Butler ile oyun yükleniyor..."
+    }
   }
 }

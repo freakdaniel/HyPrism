@@ -32,7 +32,8 @@
       "uuid": "UUID",
       "uuidWarning": "ID unique. Le changer réinitialise le skin !",
       "randomize": "Aléatoire",
-      "copy": "Copier"
+      "copy": "Copier",
+      "nameWarning": "Hytale a un modèle de pseudo spécifique. Utilisez uniquement des caractères anglais et des chiffres (0-9), en évitant les symboles spéciaux et les espaces (exceptions : '-', '_')"
     },
     "generalSettings": {
       "title": "Général",
@@ -156,5 +157,37 @@
     "updatesAvailable": "{0} mises à jour :",
     "openModsFolder": "Dossier Mods",
     "close": "Fermer"
+  },
+  "launch": {
+    "state": {
+      "preparing": "Préparation",
+      "download": "Téléchargement",
+      "update": "Mise à jour",
+      "install": "Installation",
+      "patching": "Correction",
+      "launching": "Lancement",
+      "complete": "Terminé"
+    },
+    "detail": {
+      "preparing_session": "Préparation de la session...",
+      "checking_install": "Vérification de l'installation...",
+      "game_installed": "Le jeu est déjà installé",
+      "update_check": "Recherche de mises à jour...",
+      "downloading_patch": "Téléchargement du patch {0}/{1} ({2}%)",
+      "applying_patch": "Application du patch {0}/{1}...",
+      "patch_applied": "Patch {0} appliqué avec succès",
+      "vc_redist": "Vérification de Visual C++ Runtime...",
+      "java_install": "Installation de Java Runtime...",
+      "authenticating": "Authentification avec {0}...",
+      "patching_client": "Correction du binaire client...",
+      "patching_server": "Correction du JAR serveur...",
+      "resigning": "Resignature du binaire...",
+      "starting_process": "Démarrage du processus de jeu...",
+      "started": "Jeu démarré !",
+      "done": "Terminé",
+      "butler_install": "Installation de Butler...",
+      "downloading_generic": "Téléchargement de Hytale... {0}%",
+      "installing_butler_pwr": "Installation du jeu avec Butler..."
+    }
   }
 }

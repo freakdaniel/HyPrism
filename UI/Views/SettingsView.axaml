@@ -240,15 +240,6 @@
                                 </nav:SidebarItem.Icon>
                             </nav:SidebarItem>
 
-                            <nav:SidebarItem Text="{Binding Language^}" 
-                                             Command="{Binding SwitchTabCommand}" 
-                                             CommandParameter="language"
-                                             IsSelected="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter='language'}">
-                                <nav:SidebarItem.Icon>
-                                    <svg:Svg Path="/Assets/Icons/globe.svg" Width="18" Height="18"/>
-                                </nav:SidebarItem.Icon>
-                            </nav:SidebarItem>
-
                             <nav:SidebarItem Text="{Binding Data^}" 
                                              Command="{Binding SwitchTabCommand}" 
                                              CommandParameter="data"
@@ -347,23 +338,31 @@
                         <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=general}" Spacing="30">
                             <TextBlock Text="{Binding GeneralHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                             
-                            <!-- Launcher Storage -->
+                            <!-- Language Settings -->
                             <StackPanel Spacing="8">
-                                <inputs:ActionInput Label="{Binding GeneralLauncherStorage^}" Text="{Binding LauncherDataDirectory}" IsReadOnly="True">
-                                    <inputs:ActionInput.RightContent>
-                                        <Button Command="{Binding BrowseLauncherDataCommand}" 
-                                                Background="#404040" 
-                                                Foreground="White" 
-                                                CornerRadius="6" 
-                                                Padding="12,8">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <svg:Svg Path="/Assets/Icons/hard-drive.svg" Width="16" Height="16"/>
-                                                <TextBlock Text="{Binding GeneralBrowse^}" VerticalAlignment="Center" FontSize="13"/>
+                                <inputs:SelectionInput Label="{Binding LanguageInterface^}" 
+                                                       ItemsSource="{Binding LanguageItems}"
+                                                       SelectedItem="{Binding SelectedLanguageItem}"
+                                                       Width="300"
+                                                       HorizontalAlignment="Left">
+                                    <inputs:SelectionInput.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <Border CornerRadius="2" ClipToBounds="True" VerticalAlignment="Center">
+                                                     <svg:Svg Path="{Binding FlagIconPath}" Width="22" Height="16" Css=""/>
+                                                </Border>
+                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
                                             </StackPanel>
-                                        </Button>
-                                    </inputs:ActionInput.RightContent>
-                                </inputs:ActionInput>
-                                <TextBlock Text="{Binding GeneralLauncherStorageHint^}" FontSize="12" Foreground="Gray"/>
+                                        </DataTemplate>
+                                    </inputs:SelectionInput.ItemTemplate>
+                                </inputs:SelectionInput>
+                                <TextBlock Text="{Binding LanguageInterfaceHint^}" FontSize="13" Foreground="Gray"/>
+                                
+                                <Border MaxWidth="600" HorizontalAlignment="Left" Margin="0,15,0,0">
+                                    <cards:NoticeCard Text="{Binding LanguageNote^}" 
+                                                      IconPath="/Assets/Icons/info.svg" 
+                                                      ThemeColor="#3B82F6"/>
+                                </Border>
                             </StackPanel>
                             
                             <!-- Update Channel -->
@@ -462,38 +461,6 @@
                                         Classes="TabButton"
                                         Background="#333"
                                         Foreground="White"/>
-                            </StackPanel>
-                        </StackPanel>
-                        
-                        <!-- Language Tab -->
-                        <StackPanel IsVisible="{Binding ActiveTab, Converter={StaticResource StringEqualityConverter}, ConverterParameter=language}" Spacing="30">
-                            <TextBlock Text="{Binding LanguageHeader^}" FontSize="28" FontWeight="Bold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
-                            
-                            <StackPanel Spacing="8">
-                                <inputs:SelectionInput Label="{Binding LanguageInterface^}" 
-                                                       ItemsSource="{Binding LanguageItems}"
-                                                       SelectedItem="{Binding SelectedLanguageItem}"
-                                                       Width="300"
-                                                       HorizontalAlignment="Left">
-                                    <inputs:SelectionInput.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                                <Border CornerRadius="2" ClipToBounds="True" VerticalAlignment="Center">
-                                                     <!-- Reset CSS to avoid global stroke/fill overrides for flags -->
-                                                     <svg:Svg Path="{Binding FlagIconPath}" Width="22" Height="16" Css=""/>
-                                                </Border>
-                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </inputs:SelectionInput.ItemTemplate>
-                                </inputs:SelectionInput>
-                                <TextBlock Text="{Binding LanguageInterfaceHint^}" FontSize="13" Foreground="Gray"/>
-                                
-                                <Border MaxWidth="500" HorizontalAlignment="Left" Margin="0,15,0,0">
-                                    <cards:NoticeCard Text="{Binding LanguageNote^}" 
-                                                      IconPath="/Assets/Icons/info.svg" 
-                                                      ThemeColor="#3B82F6"/>
-                                </Border>
                             </StackPanel>
                         </StackPanel>
                         

@@ -32,7 +32,8 @@
       "uuid": "UUID",
       "uuidWarning": "固有IDです。変更するとスキンがリセットされます！",
       "randomize": "ランダム",
-      "copy": "コピー"
+      "copy": "コピー",
+      "nameWarning": "Hytaleには特定のニックネームパターンがあります。英数字（0-9）のみを使用し、特殊記号やスペースは避けてください（例外： '-'、 '_'）"
     },
     "generalSettings": {
       "title": "一般設定",
@@ -156,5 +157,37 @@
     "updatesAvailable": "{0} 個の更新があります:",
     "openModsFolder": "Modフォルダ",
     "close": "閉じる"
+  },
+  "launch": {
+    "state": {
+      "preparing": "準備中",
+      "download": "ダウンロード中",
+      "update": "更新中",
+      "install": "インストール中",
+      "patching": "パッチ適用中",
+      "launching": "起動中",
+      "complete": "完了"
+    },
+    "detail": {
+      "preparing_session": "ゲームセッションを準備中...",
+      "checking_install": "インストールを確認中...",
+      "game_installed": "ゲームは既にインストールされています",
+      "update_check": "更新を確認中...",
+      "downloading_patch": "パッチ {0}/{1} をダウンロード中 ({2}%)",
+      "applying_patch": "パッチ {0}/{1} を適用中...",
+      "patch_applied": "パッチ {0} が正常に適用されました",
+      "vc_redist": "Visual C++ Runtimeを確認中...",
+      "java_install": "Java Runtimeをインストール中...",
+      "authenticating": "{0} で認証中...",
+      "patching_client": "クライアントバイナリをパッチ中...",
+      "patching_server": "サーバーJARをパッチ中...",
+      "resigning": "バイナリを再署名中...",
+      "starting_process": "ゲームプロセスを開始中...",
+      "started": "ゲームが起動しました！",
+      "done": "完了",
+      "butler_install": "Butlerをインストール中...",
+      "downloading_generic": "Hytaleをダウンロード中... {0}%",
+      "installing_butler_pwr": "Butlerでゲームをインストール中..."
+    }
   }
 }

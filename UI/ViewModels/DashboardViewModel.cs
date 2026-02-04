@@ -2,6 +2,7 @@ using System;
 using System.Reactive;
 using System.Threading.Tasks;
 using ReactiveUI;
+using HyPrism;
 using HyPrism.Services;
 using HyPrism.Services.Core;
 using HyPrism.Services.Game;
@@ -31,6 +32,7 @@ public class DashboardViewModel : ReactiveObject
     private readonly FileDialogService _fileDialogService;
     private readonly ProfileService _profileService;
     private readonly SkinService _skinService;
+    private readonly AppPathConfiguration _appPathConfiguration;
 
     // Partial ViewModels
     public HeaderViewModel HeaderViewModel { get; }
@@ -238,7 +240,8 @@ public class DashboardViewModel : ReactiveObject
         FileDialogService fileDialogService,
         ProfileService profileService,
         SkinService skinService,
-        GitHubService gitHubService)
+        GitHubService gitHubService,
+        AppPathConfiguration appPathConfiguration)
     {
         _gameSessionService = gameSessionService;
         _modService = modService;
@@ -252,6 +255,7 @@ public class DashboardViewModel : ReactiveObject
         _fileDialogService = fileDialogService;
         _profileService = profileService;
         _skinService = skinService;
+        _appPathConfiguration = appPathConfiguration;
 
         // Initialize Backgrounds
         try 
@@ -306,7 +310,8 @@ public class DashboardViewModel : ReactiveObject
             _instanceService,
             _fileService,
             gitHubService,
-            _browserService);
+            _browserService,
+            _appPathConfiguration);
         SettingsViewModel.CloseCommand.Subscribe(_ => IsSettingsOpen = false);
 
         // --- Commands ---

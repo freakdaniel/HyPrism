@@ -32,7 +32,8 @@
       "uuid": "UUID",
       "uuidWarning": "Унікальны ID для мультыплэера. Змена скіне ваш скін!",
       "randomize": "Выпадкова",
-      "copy": "Кап."
+      "copy": "Кап.",
+      "nameWarning": "Hytale мае пэўны шаблон нікнэймаў. Выкарыстоўвайце толькі англійскія літары і лічбы (0-9), пазбягаючы спецыяльных сімвалаў і прабелаў (выключэнні: '-', '_')"
     },
     "generalSettings": {
       "title": "Агульныя налады",
@@ -158,5 +159,37 @@
     "updatesAvailable": "Даступна абнаўленняў: {0}",
     "openModsFolder": "Папка модаў",
     "close": "Закрыць"
+  },
+  "launch": {
+    "state": {
+      "preparing": "Падрыхтоўка",
+      "download": "Загрузка",
+      "update": "Абнаўленне",
+      "install": "Усталёўка",
+      "patching": "Патчынг",
+      "launching": "Запуск",
+      "complete": "Гатова"
+    },
+    "detail": {
+      "preparing_session": "Падрыхтоўка сесіі...",
+      "checking_install": "Праверка ўсталёўкі...",
+      "game_installed": "Гульня ўжо ўсталявана",
+      "update_check": "Праверка абнаўленняў...",
+      "downloading_patch": "Загрузка патча {0}/{1} ({2}%)",
+      "applying_patch": "Ужыванне патча {0}/{1}...",
+      "patch_applied": "Патч {0} паспяхова ўжыты",
+      "vc_redist": "Праверка Visual C++ Runtime...",
+      "java_install": "Усталёўка Java Runtime...",
+      "authenticating": "Аўтарызацыя праз {0}...",
+      "patching_client": "Патчынг кліента...",
+      "patching_server": "Патчынг сервера...",
+      "resigning": "Перападпісанне бінарнікаў...",
+      "starting_process": "Запуск працэсу гульні...",
+      "started": "Гульня запушчана!",
+      "done": "Гатова",
+      "butler_install": "Усталёўка Butler...",
+      "downloading_generic": "Загрузка Hytale... {0}%",
+      "installing_butler_pwr": "Усталёўка гульні праз Butler..."
+    }
   }
 }

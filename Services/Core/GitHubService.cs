@@ -40,7 +40,6 @@ public class GitHubService
     {
         try
         {
-            // Per page 100 to get everyone
             var url = $"https://api.github.com/repos/{RepoOwner}/{RepoName}/contributors?per_page=100";
             return await _httpClient.GetFromJsonAsync<List<GitHubUser>>(url) ?? [];
         }

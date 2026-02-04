@@ -331,6 +331,8 @@ public class SettingsViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> OpenDiscordCommand { get; }
     public ReactiveCommand<Unit, Unit> ReportBugCommand { get; }
 
+    private readonly AppPathConfiguration _appPathConfiguration;
+
     public SettingsViewModel(
         SettingsService settingsService,
         ConfigService configService,
@@ -339,7 +341,8 @@ public class SettingsViewModel : ReactiveObject
         InstanceService instanceService,
         FileService fileService,
         GitHubService gitHubService,
-        BrowserService browserService)
+        BrowserService browserService,
+        AppPathConfiguration appPathConfiguration)
     {
         _settingsService = settingsService;
         _configService = configService;
@@ -349,6 +352,7 @@ public class SettingsViewModel : ReactiveObject
         _gitHubService = gitHubService;
         _browserService = browserService;
         Localization = localizationService;
+        _appPathConfiguration = appPathConfiguration;
         
         // Initialize reactive localization properties - these will update automatically
         var loc = Localization;
@@ -470,7 +474,9 @@ public class SettingsViewModel : ReactiveObject
         // Initialize properties
         _nick = _configService.Configuration.Nick;
         _uuid = _configService.Configuration.UUID ?? "";
-        _launcherDataDirectory = _settingsService.GetLauncherDataDirectory();
+        
+        var configuredDataDir = _settingsService.GetLauncherDataDirectory();
+        _launcherDataDirectory = string.IsNullOrEmpty(configuredDataDir) ? _appPathConfiguration.AppDir : configuredDataDir;
         
         // Initialize branch selection
         var currentBranch = _settingsService.GetLauncherBranch();
@@ -657,7 +663,7 @@ public class SettingsViewModel : ReactiveObject
                      if (!string.IsNullOrEmpty(avatarUrl))
                      {
                          _ = Task.Run(async () => {
-                             var bmp = await _gitHubService.LoadAvatarAsync(avatarUrl, 96);
+                             var bmp = await _gitHubService.LoadAvatarAsync(avatarUrl);
                              if(bmp != null) 
                              {
                                  Avalonia.Threading.Dispatcher.UIThread.Post(() => p.Avatar = bmp);

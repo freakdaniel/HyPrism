@@ -32,7 +32,8 @@
       "uuid": "UUID",
       "uuidWarning": "고유 ID입니다. 변경 시 스킨이 초기화됩니다!",
       "randomize": "무작위",
-      "copy": "복사"
+      "copy": "복사",
+      "nameWarning": "Hytale에는 특정 닉네임 패턴이 있습니다. 특수 기호와 공백을 피하고 영어 문자와 숫자(0-9)만 사용하십시오 (예외: '-', '_')"
     },
     "generalSettings": {
       "title": "일반 설정",
@@ -156,5 +157,37 @@
     "updatesAvailable": "{0}개의 업데이트 가능:",
     "openModsFolder": "모드 폴더",
     "close": "닫기"
+  },
+  "launch": {
+    "state": {
+      "preparing": "준비 중",
+      "download": "다운로드 중",
+      "update": "업데이트 중",
+      "install": "설치 중",
+      "patching": "패치 중",
+      "launching": "실행 중",
+      "complete": "완료"
+    },
+    "detail": {
+      "preparing_session": "게임 세션 준비 중...",
+      "checking_install": "설치 확인 중...",
+      "game_installed": "게임이 이미 설치되어 있습니다",
+      "update_check": "업데이트 확인 중...",
+      "downloading_patch": "패치 {0}/{1} 다운로드 중 ({2}%)",
+      "applying_patch": "패치 {0}/{1} 적용 중...",
+      "patch_applied": "패치 {0}가 성공적으로 적용되었습니다",
+      "vc_redist": "Visual C++ Runtime 확인 중...",
+      "java_install": "Java Runtime 설치 중...",
+      "authenticating": "{0}(으)로 인증 중...",
+      "patching_client": "클라이언트 바이너리 패치 중...",
+      "patching_server": "서버 JAR 패치 중...",
+      "resigning": "바이너리 재서명 중...",
+      "starting_process": "게임 프로세스 시작 중...",
+      "started": "게임이 시작되었습니다!",
+      "done": "완료",
+      "butler_install": "Butler 설치 중...",
+      "downloading_generic": "Hytale 다운로드 중... {0}%",
+      "installing_butler_pwr": "Butler로 게임 설치 중..."
+    }
   }
 }
