@@ -75,7 +75,7 @@ public class GameSessionService
             }
 
             _downloadCts = new CancellationTokenSource();
-            _progressService.ReportDownloadProgress("preparing", 0, "Preparing game session...", null, 0, 0);
+            _progressService.ReportDownloadProgress("preparing", 0, "launch.detail.preparing_session", null, 0, 0);
             
             string branch = UtilityService.NormalizeVersionType(_config.VersionType);
             var versions = await _versionService.GetVersionListAsync(branch);
@@ -279,7 +279,7 @@ public class GameSessionService
                 // VC++ Redist check
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    _progressService.ReportDownloadProgress("install", 94, "Checking Visual C++ Runtime...", null, 0, 0);
+                    _progressService.ReportDownloadProgress("install", 94, "launch.detail.vc_redist", null, 0, 0);
                     try
                     {
                         await _launchService.EnsureVCRedistInstalledAsync((progress, message) =>
@@ -298,7 +298,7 @@ public class GameSessionService
                 if (!File.Exists(jrePath))
                 {
                     Logger.Info("Download", "JRE missing, installing...");
-                    _progressService.ReportDownloadProgress("install", 96, "Installing Java Runtime...", null, 0, 0);
+                    _progressService.ReportDownloadProgress("install", 96, "launch.detail.java_install", null, 0, 0);
                     try
                     {
                         await _launchService.EnsureJREInstalledAsync((progress, message) =>
@@ -314,7 +314,7 @@ public class GameSessionService
                     }
                 }
                 
-                _progressService.ReportDownloadProgress("complete", 100, "Launching game...", null, 0, 0);
+                _progressService.ReportDownloadProgress("complete", 100, "launch.detail.launching_game", null, 0, 0);
                 try
                 {
                     await LaunchGameAsync(versionPath, branch);
@@ -331,7 +331,7 @@ public class GameSessionService
             // Game is NOT installed
             Logger.Info("Download", "Game not installed, starting download...");
 
-            _progressService.ReportDownloadProgress("download", 0, "Preparing download...", null, 0, 0);
+            _progressService.ReportDownloadProgress("download", 0, "launch.detail.preparing_download", null, 0, 0);
             
             try
             {
@@ -413,11 +413,11 @@ public class GameSessionService
             else
             {
                  // Fast forward progress
-                 _progressService.ReportDownloadProgress("download", 65, "Using cached installer...", null, 0, 0);
+                 _progressService.ReportDownloadProgress("download", 65, "launch.detail.using_cached_installer", null, 0, 0);
             }
             
             // Extract PWR
-            _progressService.ReportDownloadProgress("install", 65, "Installing game with Butler...", null, 0, 0);
+            _progressService.ReportDownloadProgress("install", 65, "launch.detail.installing_butler_pwr", null, 0, 0);
             
             try
             {
@@ -447,11 +447,11 @@ public class GameSessionService
                 _instanceService.SaveLatestInfo(branch, targetVersion);
             }
             
-            _progressService.ReportDownloadProgress("complete", 95, "Download complete!", null, 0, 0);
+            _progressService.ReportDownloadProgress("complete", 95, "launch.detail.download_complete", null, 0, 0);
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _progressService.ReportDownloadProgress("install", 95, "Checking Visual C++ Runtime...", null, 0, 0);
+                _progressService.ReportDownloadProgress("install", 95, "launch.detail.vc_redist", null, 0, 0);
                 try
                 {
                     await _launchService.EnsureVCRedistInstalledAsync((progress, message) =>
@@ -466,7 +466,7 @@ public class GameSessionService
                 }
             }
 
-            _progressService.ReportDownloadProgress("install", 96, "Checking Java Runtime...", null, 0, 0);
+            _progressService.ReportDownloadProgress("install", 96, "launch.detail.java_check", null, 0, 0);
             try
             {
                 await _launchService.EnsureJREInstalledAsync((progress, message) =>
@@ -490,7 +490,7 @@ public class GameSessionService
                 return new DownloadProgress { Success = true, Progress = 100 };
             }
 
-            _progressService.ReportDownloadProgress("complete", 100, "Launching game...", null, 0, 0);
+            _progressService.ReportDownloadProgress("complete", 100, "launch.detail.launching_game", null, 0, 0);
 
             try
             {
@@ -582,7 +582,7 @@ public class GameSessionService
         bool enablePatching = true;
         if (enablePatching && !string.IsNullOrWhiteSpace(_config.AuthDomain))
         {
-            _progressService.ReportDownloadProgress("patching", 0, "Initializing Patcher...", null, 0, 0);
+            _progressService.ReportDownloadProgress("patching", 0, "launch.detail.patching_init", null, 0, 0);
             try
             {
                 string baseDomain = _config.AuthDomain;
@@ -593,7 +593,7 @@ public class GameSessionService
                 
                 Logger.Info("Game", $"Patching binary: hytale.com -> {baseDomain}");
                 
-                _progressService.ReportDownloadProgress("patching", 10, "Patching Client Binary...", null, 0, 0);
+                _progressService.ReportDownloadProgress("patching", 10, "launch.detail.patching_client", null, 0, 0);
                 
                 var patcher = new ClientPatcher(baseDomain);
                 
@@ -610,7 +610,7 @@ public class GameSessionService
                 
                 Logger.Info("Game", $"Patching server JAR: sessions.hytale.com -> sessions.{baseDomain}");
                 
-                _progressService.ReportDownloadProgress("patching", 65, "Patching Server JAR...", null, 0, 0);
+                _progressService.ReportDownloadProgress("patching", 65, "launch.detail.patching_server", null, 0, 0);
 
                 var serverPatchResult = patcher.PatchServerJar(versionPath, (msg, progress) =>
                 {
@@ -629,7 +629,7 @@ public class GameSessionService
                     {
                         try
                         {
-                            _progressService.ReportDownloadProgress("patching", 95, "Re-signing binary...", null, 0, 0);
+                            _progressService.ReportDownloadProgress("patching", 95, "launch.detail.resigning", null, 0, 0);
                             Logger.Info("Game", "Re-signing patched binary...");
                             string appBundle = Path.Combine(versionPath, "Client", "Hytale.app");
                             bool signed = ClientPatcher.SignMacOSBinary(appBundle);
@@ -642,7 +642,7 @@ public class GameSessionService
                         }
                     }
                 }
-                _progressService.ReportDownloadProgress("patching", 100, "Patching Complete", null, 0, 0);
+                _progressService.ReportDownloadProgress("patching", 100, "launch.detail.patching_complete", null, 0, 0);
             }
             catch (Exception ex)
             {
@@ -651,7 +651,7 @@ public class GameSessionService
             }
         }
         
-        _progressService.ReportDownloadProgress("launching", 0, "Authenticating...", null, 0, 0);
+        _progressService.ReportDownloadProgress("launching", 0, "launch.detail.authenticating_generic", null, 0, 0);
 
         string sessionUuid = _userIdentityService.GetUuidForUser(_config.Nick);
         Logger.Info("Game", $"Using UUID for user '{_config.Nick}': {sessionUuid}");
@@ -661,7 +661,7 @@ public class GameSessionService
         
         if (_config.OnlineMode && !string.IsNullOrWhiteSpace(_config.AuthDomain))
         {
-            _progressService.ReportDownloadProgress("launching", 20, $"Authenticating with {_config.AuthDomain}...", null, 0, 0);
+            _progressService.ReportDownloadProgress("launching", 20, "launch.detail.authenticating", new object[] { _config.AuthDomain }, 0, 0);
             Logger.Info("Game", $"Online mode enabled - fetching auth tokens from {_config.AuthDomain}...");
             try
             {
@@ -837,7 +837,7 @@ exec env \
 
         try
         {
-            _progressService.ReportDownloadProgress("launching", 80, "Starting game process...", null, 0, 0);
+            _progressService.ReportDownloadProgress("launching", 80, "launch.detail.starting_process", null, 0, 0);
 
             var process = new Process { StartInfo = startInfo };
             var interfaceLoadedTcs = new TaskCompletionSource<bool>();
@@ -959,7 +959,7 @@ exec env \
                 _discordService.SetPresence(DiscordService.PresenceState.Playing, $"Playing as {_config.Nick}");
                 _progressService.ReportGameStateChanged("started", process.Id);
                 
-                _progressService.ReportDownloadProgress("launching", 100, "Waiting for game window...", null, 0, 0);
+                _progressService.ReportDownloadProgress("launching", 100, "launch.detail.waiting_for_window", null, 0, 0);
                 
                 // Wait for interface loaded signal or timeout (60s)
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(60));
@@ -970,7 +970,7 @@ exec env \
                      Logger.Warning("Game", "Timed out waiting for interface load signal (or game output is silent)");
                 }
 
-                _progressService.ReportDownloadProgress("complete", 100, "Done", null, 0, 0);
+                _progressService.ReportDownloadProgress("complete", 100, "launch.detail.done", null, 0, 0);
                 
                 // Handle process exit in background
                 _ = Task.Run(async () =>

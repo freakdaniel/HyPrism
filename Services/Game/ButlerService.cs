@@ -48,7 +48,7 @@ public class ButlerService
             // Verify butler actually works
             if (await VerifyButlerWorksAsync(butlerPath))
             {
-                progressCallback?.Invoke(100, "Butler ready");
+                progressCallback?.Invoke(100, "launch.detail.butler_ready");
                 return butlerPath;
             }
             else
@@ -72,7 +72,7 @@ public class ButlerService
             }
         }
 
-        progressCallback?.Invoke(0, "Downloading Butler...");
+        progressCallback?.Invoke(0, "launch.detail.downloading_butler");
 
         // Determine OS and architecture
         string osName = UtilityService.GetOS();
@@ -112,7 +112,7 @@ public class ButlerService
                 if (totalBytes > 0)
                 {
                     int progress = (int)((totalRead * 80) / totalBytes); // 0-80% for download
-                    progressCallback?.Invoke(progress, "Downloading Butler...");
+                    progressCallback?.Invoke(progress, "launch.detail.downloading_butler");
                 }
             }
         }
@@ -182,7 +182,7 @@ public class ButlerService
             throw new Exception($"Butler verification failed: {ex.Message}");
         }
 
-        progressCallback?.Invoke(100, "Butler ready");
+        progressCallback?.Invoke(100, "launch.detail.butler_ready");
         return butlerPath;
     }
 
@@ -237,7 +237,7 @@ public class ButlerService
         Directory.CreateDirectory(targetDir);
         Directory.CreateDirectory(stagingDir);
 
-        progressCallback?.Invoke(10, "Installing game...");
+        progressCallback?.Invoke(10, "launch.detail.installing_game");
 
         Logger.Info("Butler", $"Applying PWR: {pwrFile} -> {targetDir}");
 
@@ -276,7 +276,7 @@ public class ButlerService
             if (lastProgress < 90)
             {
                 lastProgress = Math.Min(lastProgress + 2, 90);
-                progressCallback?.Invoke(lastProgress, "Installing game...");
+                progressCallback?.Invoke(lastProgress, "launch.detail.installing_game");
             }
         };
         progressTimer.Start();
@@ -318,7 +318,7 @@ public class ButlerService
                                 if (mappedProgress > lastProgress)
                                 {
                                     lastProgress = mappedProgress;
-                                    progressCallback?.Invoke(mappedProgress, "Installing game...");
+                                    progressCallback?.Invoke(mappedProgress, "launch.detail.installing_game");
                                 }
                             }
                         }

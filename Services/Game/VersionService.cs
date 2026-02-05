@@ -39,21 +39,8 @@ public class VersionService
             return freshCache;
         }
 
-        // Load version cache
-        var cache = LoadVersionCache();
-        int startVersion = 1;
-        
-        // If we have cached versions for this branch, start from the highest known version + 1
-        if (cache.KnownVersions.TryGetValue(normalizedBranch, out var knownVersions) && knownVersions.Count > 0)
-        {
-            startVersion = knownVersions.Max() + 1;
-            result.AddRange(knownVersions);
-        }
-
-        // Check for new versions starting from startVersion
-        int currentVersion = startVersion;
-        // If we have no cache, start checking from 0 just in case
-        if (cache.KnownVersions.Count == 0) currentVersion = 0;
+        // Check for versions starting from 0
+        int currentVersion = 0;
 
         int consecutiveFailures = 0;
         const int maxConsecutiveFailures = 20; // Increased to skip potential gaps or missing early versions
@@ -78,33 +65,7 @@ public class VersionService
             currentVersion++;
         }
 
-        // Verify that all cached versions still exist (in parallel)
-        if (knownVersions != null && knownVersions.Count > 0)
-        {
-            var verifyTasks = knownVersions
-                .Where(v => v < startVersion)
-                .Select(v => CheckVersionExistsAsync(osName, arch, normalizedBranch, v))
-                .ToList();
-            
-            if (verifyTasks.Count > 0)
-            {
-                var verifyResults = await Task.WhenAll(verifyTasks);
-                foreach (var (version, exists) in verifyResults)
-                {
-                    if (exists && !result.Contains(version))
-                    {
-                        result.Add(version);
-                    }
-                }
-            }
-        }
-
         result.Sort((a, b) => b.CompareTo(a)); // Sort descending (latest first)
-        
-        // Save updated cache
-        cache.KnownVersions[normalizedBranch] = result;
-        cache.LastUpdated = DateTime.UtcNow;
-        SaveVersionCache(cache);
 
         SaveVersionsCacheSnapshot(normalizedBranch, osName, arch, result);
         
@@ -270,42 +231,6 @@ public class VersionService
         return patches;
     }
 
-    // Version cache management
-    private string GetVersionCachePath() => Path.Combine(_appDir, "version_cache.json");
-
-    private VersionCache LoadVersionCache()
-    {
-        try
-        {
-            var path = GetVersionCachePath();
-            if (File.Exists(path))
-            {
-                var json = File.ReadAllText(path);
-                var cache = JsonSerializer.Deserialize<VersionCache>(json);
-                if (cache != null) return cache;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Version", $"Failed to load version cache: {ex.Message}");
-        }
-        return new VersionCache();
-    }
-
-    private void SaveVersionCache(VersionCache cache)
-    {
-        try
-        {
-            var path = GetVersionCachePath();
-            var json = JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(path, json);
-        }
-        catch (Exception ex)
-        {
-            Logger.Warning("Version", $"Failed to save version cache: {ex.Message}");
-        }
-    }
-
     // Utility methods
     private string NormalizeBranch(string branch)
     {
@@ -327,7 +252,7 @@ public class VersionService
     }
 
     private string GetVersionsCacheSnapshotPath()
-        => Path.Combine(_appDir, "Cache", "Game", "versions.json");
+        => Path.Combine(_appDir, "Cache", "Game", "Versions", "versions.json");
 
     private List<int>? TryLoadFreshVersionsCache(string branch, string osName, string arch, TimeSpan maxAge)
     {

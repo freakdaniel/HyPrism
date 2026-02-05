@@ -415,17 +415,17 @@ public class ClientPatcher
         if (IsPatchedAlready(clientPath))
         {
             Logger.Info("Patcher", $"Client already patched for {_targetDomain}, skipping", false);
-            progressCallback?.Invoke("Client already patched", 100);
+            progressCallback?.Invoke("launch.detail.client_already_patched", 100);
             return new PatchResult { Success = true, AlreadyPatched = true, PatchCount = 0 };
         }
 
-        progressCallback?.Invoke("Reading client binary...", 10);
+        progressCallback?.Invoke("launch.detail.reading_client_binary", 10);
         Logger.Info("Patcher", "Reading client binary...", false);
         byte[] data = File.ReadAllBytes(clientPath);
         byte[] originalData = (byte[])data.Clone(); // Keep a copy to check if we modified anything
         Logger.Info("Patcher", $"Binary size: {data.Length / 1024.0 / 1024.0:F2} MB", false);
 
-        progressCallback?.Invoke("Patching domain references...", 30);
+        progressCallback?.Invoke("launch.detail.patching_domain_refs", 30);
         Logger.Info("Patcher", "Applying domain patches (length-prefixed format)...", false);
         int domainCount = ApplyDomainPatches(data);
 
@@ -474,7 +474,7 @@ public class ClientPatcher
                 BackupClient(clientPath);
                 File.WriteAllBytes(clientPath, data);
                 MarkAsPatched(clientPath);
-                progressCallback?.Invoke("Patching complete", 100);
+                progressCallback?.Invoke("launch.detail.patching_complete", 100);
                 return new PatchResult { Success = true, PatchCount = utf8Count };
             }
 
@@ -538,7 +538,7 @@ public class ClientPatcher
                 BackupClient(clientPath);
                 File.WriteAllBytes(clientPath, data);
                 MarkAsPatched(clientPath);
-                progressCallback?.Invoke("Patching complete", 100);
+                progressCallback?.Invoke("launch.detail.patching_complete", 100);
                 return new PatchResult { Success = true, PatchCount = legacyCount };
             }
 
@@ -547,17 +547,17 @@ public class ClientPatcher
             return new PatchResult { Success = true, PatchCount = 0, Warning = "No occurrences found - may already be patched" };
         }
 
-        progressCallback?.Invoke("Creating backup...", 70);
+        progressCallback?.Invoke("launch.detail.creating_backup", 70);
         Logger.Info("Patcher", "Creating backup before writing...");
         BackupClient(clientPath);
         
-        progressCallback?.Invoke("Writing patched binary...", 80);
+        progressCallback?.Invoke("launch.detail.writing_patched_binary", 80);
         Logger.Info("Patcher", "Writing patched binary...");
         File.WriteAllBytes(clientPath, data);
 
         MarkAsPatched(clientPath);
 
-        progressCallback?.Invoke("Patching complete", 100);
+        progressCallback?.Invoke("launch.detail.patching_complete", 100);
         Logger.Success("Patcher", $"Successfully patched {totalCount} occurrences");
         Logger.Info("Patcher", "=== Patching Complete ===");
 
@@ -734,7 +734,7 @@ public class ClientPatcher
                         if (foundPatched)
                         {
                             Logger.Info("Patcher", $"Server JAR already patched for {_targetDomain}, skipping", false);
-                            progressCallback?.Invoke("Server already patched", 100);
+                            progressCallback?.Invoke("launch.detail.server_already_patched", 100);
                             return new PatchResult { Success = true, AlreadyPatched = true, PatchCount = 0 };
                         }
                         else
@@ -750,7 +750,7 @@ public class ClientPatcher
             }
         }
 
-        progressCallback?.Invoke("Reading server JAR...", 10);
+        progressCallback?.Invoke("launch.detail.reading_server_jar", 10);
         Logger.Info("Patcher", "Extracting and patching server JAR (ZIP archive)...");
         
         // Create backup first
@@ -767,7 +767,7 @@ public class ClientPatcher
         
         try
         {
-            progressCallback?.Invoke("Patching class files...", 30);
+            progressCallback?.Invoke("launch.detail.patching_class_files", 30);
             
             // Open the existing JAR and create a new one with patched content
             using (var sourceArchive = ZipFile.OpenRead(serverJarPath))
@@ -828,7 +828,7 @@ public class ClientPatcher
                 }
             }
             
-            progressCallback?.Invoke("Replacing original JAR...", 80);
+            progressCallback?.Invoke("launch.detail.replacing_original_jar", 80);
             
             // Replace the original JAR with the patched one
             File.Delete(serverJarPath);
@@ -865,7 +865,7 @@ public class ClientPatcher
         };
         File.WriteAllText(patchFlag, JsonSerializer.Serialize(flagData2, new JsonSerializerOptions { WriteIndented = true }));
 
-        progressCallback?.Invoke("Server JAR patched", 100);
+        progressCallback?.Invoke("launch.detail.server_jar_patched", 100);
         Logger.Success("Patcher", $"Successfully patched {totalPatched} occurrences in server JAR");
         
         return new PatchResult { Success = true, PatchCount = totalPatched };

@@ -19,6 +19,8 @@ public class MainViewModel : ReactiveObject
     private readonly ProfileManagementService _profileManagementService;
     private readonly InstanceService _instanceService;
     private readonly SkinService _skinService;
+    private readonly VersionService _versionService;
+    private readonly ConfigService _configService;
 
     // --- Core Architecture ---
     // The Loading Screen is distinct and effectively "covers" the application
@@ -40,6 +42,7 @@ public class MainViewModel : ReactiveObject
     public MainViewModel(
         DiscordService discordService,
         ProfileManagementService profileManagementService,
+        VersionService versionService,
         // We inject all services to pass them down to the Dashboard
         // Ideally we would use a Factory or DI container resolution for the child, 
         // but passing them is fine for now.
@@ -64,6 +67,8 @@ public class MainViewModel : ReactiveObject
         _profileManagementService = profileManagementService;
         _instanceService = instanceService;
         _skinService = skinService;
+        _versionService = versionService;
+        _configService = configService;
 
         LoadingViewModel = new LoadingViewModel();
         
@@ -119,6 +124,17 @@ public class MainViewModel : ReactiveObject
             {
                 LoadingViewModel.Update("loading", "Loading Localization...", 20);
                 await Task.Delay(300);
+
+                LoadingViewModel.Update("loading", "Loading Versions...", 40);
+                try
+                {
+                    var branch = _configService.Configuration.VersionType;
+                    await _versionService.GetVersionListAsync(branch);
+                }
+                catch (Exception ex)
+                {
+                    Services.Core.Logger.Warning("Startup", $"Failed to preload versions: {ex.Message}");
+                }
 
                 // TODO: Read this setting from DashboardViewModel if possible or service
                 // For now, assuming we want to load news

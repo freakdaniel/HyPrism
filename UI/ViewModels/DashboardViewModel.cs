@@ -397,7 +397,7 @@ public class DashboardViewModel : ReactiveObject
         if (string.IsNullOrEmpty(StatusTitle)) StatusTitle = "Preparing...";
         
         ProgressIconPath = "/Assets/Icons/settings.svg"; // Matches 'preparing' state icon
-        ProgressText = LocalizationService.Instance.Translate("launch.detail.preparing");
+        ProgressText = LocalizationService.Instance.Translate("launch.detail.preparing_session");
         if (string.IsNullOrEmpty(ProgressText)) ProgressText = "Preparing game session...";
 
         IsLaunchAfterDownloadVisible = false;
@@ -406,7 +406,7 @@ public class DashboardViewModel : ReactiveObject
         
         try
         {
-            var result = await _gameSessionService.DownloadAndLaunchAsync(() => LaunchAfterDownload);
+            var result = await Task.Run(() => _gameSessionService.DownloadAndLaunchAsync(() => LaunchAfterDownload));
             
             if (result.Error != null)
             {
