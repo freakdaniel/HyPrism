@@ -5,6 +5,7 @@
              xmlns:vm="using:HyPrism.UI.ViewModels"
              xmlns:cards="using:HyPrism.UI.Components.Cards"
              xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
+             xmlns:trans="using:HyPrism.UI.Views.Transitions"
              xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
              mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="700"
              x:Class="HyPrism.UI.Views.NewsView"
@@ -97,174 +98,215 @@
         </Style>
     </UserControl.Styles>
     
-    <Grid Width="380" 
-          VerticalAlignment="Stretch"
-          RowDefinitions="Auto, Auto, *">
+    <Grid VerticalAlignment="Stretch" ColumnDefinitions="*, Auto, *" ClipToBounds="False">
         
-        <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <svg:Svg Path="/Assets/Icons/newspaper.svg" 
-                         Width="20" 
-                         Height="20"
-                         VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding NewsTitle^}" 
-                           FontSize="16" 
-                           FontWeight="Bold" 
-                           Foreground="White" 
-                           VerticalAlignment="Center"/>
+        <!-- COLUMN 1: LEFT NAVIGATION (Cards) -->
+        <!-- We use a flexible width column now to allow centering the Hub -->
+        <Grid Grid.Column="0" RowDefinitions="Auto, *" Margin="20,0,0,0" ClipToBounds="False">
+            
+            <!-- Tab Switcher (Top Left) -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="15" Margin="0,0,0,20" HorizontalAlignment="Left">
+                <Button Classes="tab-btn" 
+                        Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='all'}" 
+                        Command="{Binding SetFilterCommand}" CommandParameter="all">
+                    <TextBlock Text="{Binding NewsAll^}" FontWeight="SemiBold"/>
+                </Button>
+                <Button Classes="tab-btn" 
+                        Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='hytale'}" 
+                        Command="{Binding SetFilterCommand}" CommandParameter="hytale">
+                    <TextBlock Text="{Binding NewsHytale^}" FontWeight="SemiBold"/>
+                </Button>
+                <Button Classes="tab-btn" 
+                        Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='hyprism'}" 
+                        Command="{Binding SetFilterCommand}" CommandParameter="hyprism">
+                    <TextBlock Text="{Binding NewsHyPrism^}" FontWeight="SemiBold"/>
+                </Button>
             </StackPanel>
+            
+            <!-- Wheel List -->
+            <Grid Grid.Row="1" Background="Transparent" Name="ScrollArea" ClipToBounds="False">
+                 <Panel Background="Transparent"/> <!-- Catch scroll events -->
+                 
+                 <!-- We use a Panel instead of StackPanel so we can absolutely position items relative to Center (0,0) -->
+                 <!-- ClipToBounds=False is CRITICAL to allow items to flow outside the grid if needed -->
+                 <ItemsControl ItemsSource="{Binding VisibleItems}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,220,0" ClipToBounds="False">
+                     <ItemsControl.Styles>
+                         <Style Selector="ContentPresenter">
+                             <Setter Property="Canvas.ZIndex" Value="{Binding ZIndex}"/>
+                         </Style>
+                     </ItemsControl.Styles>
+                     <ItemsControl.ItemsPanel>
+                         <ItemsPanelTemplate>
+                             <Panel /> 
+                         </ItemsPanelTemplate>
+                     </ItemsControl.ItemsPanel>
+                     <ItemsControl.ItemTemplate>
+                         <DataTemplate>
+                             <Grid Width="360" Height="80">
+                                 <!-- Transformations for the Wheel Effect -->
+                                 <Grid.RenderTransform>
+                                     <TransformGroup>
+                                         <TranslateTransform X="{Binding TranslateX}" Y="{Binding TranslateY}"/>
+                                         <!-- Rotate slightly to face center if desired, or keep flat -->
+                                         <RotateTransform Angle="{Binding Angle}"/>
+                                         <ScaleTransform ScaleX="{Binding Scale}" ScaleY="{Binding Scale}"/>
+                                     </TransformGroup>
+                                 </Grid.RenderTransform>
+                                 
+                                 <Grid.Transitions>
+                                     <Transitions>
+                                         <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.4" Easing="CubicEaseOut"/>
+                                         <!-- Animating BlurRadius might be expensive, careful -->
+                                     </Transitions>
+                                 </Grid.Transitions>
+                                 
+                                 <Border CornerRadius="12"
+                                     ClipToBounds="True"
+                                     Opacity="{Binding Opacity}"
+                                     BorderBrush="#66FFFFFF"
+                                     BorderThickness="1"
+                                     BoxShadow="0 10 24 0 #70000000">
+                                     <Border.Effect>
+                                         <BlurEffect Radius="{Binding BlurRadius}"/>
+                                     </Border.Effect>
+                                     <Grid>
+                                         <!-- Background image (blurred, enlarged, darkened) -->
+                                         <asyncImageLoader:AdvancedImage Source="{Binding Data.ImageUrl}" Stretch="UniformToFill">
+                                             <asyncImageLoader:AdvancedImage.Effect>
+                                                 <BlurEffect Radius="18"/>
+                                             </asyncImageLoader:AdvancedImage.Effect>
+                                             <asyncImageLoader:AdvancedImage.RenderTransform>
+                                                 <ScaleTransform ScaleX="1.4" ScaleY="1.4"/>
+                                             </asyncImageLoader:AdvancedImage.RenderTransform>
+                                         </asyncImageLoader:AdvancedImage>
+                                         <Border Background="#C0000000"/>
+                                         <!-- Glass overlay -->
+                                         <Border Background="#14FFFFFF"/>
+                                         <Border>
+                                             <Border.Background>
+                                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                     <GradientStop Color="#22FFFFFF" Offset="0"/>
+                                                     <GradientStop Color="#0AFFFFFF" Offset="1"/>
+                                                 </LinearGradientBrush>
+                                             </Border.Background>
+                                         </Border>
+                                         
+                                         <Grid Margin="12">
+                                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                 <TextBlock Text="{Binding Data.Title}" Foreground="White" TextTrimming="CharacterEllipsis" FontSize="14" FontWeight="SemiBold" TextAlignment="Right"/>
+                                                 <Grid ColumnDefinitions="*, Auto" Margin="0,4,0,0" HorizontalAlignment="Right">
+                                                     <TextBlock Grid.Column="0" Text="{Binding Data.Date}" Foreground="#E6FFFFFF" FontSize="12" Margin="0,0,8,0"/>
+                                                     <Border Grid.Column="1" Background="#33FFFFFF" CornerRadius="4" Padding="6,2">
+                                                         <TextBlock Text="{Binding Data.Source}" FontSize="10" Foreground="#F5FFFFFF"/>
+                                                     </Border>
+                                                 </Grid>
+                                             </StackPanel>
+                                         </Grid>
+                                     </Grid>
+                                 </Border>
+                             </Grid>
+                         </DataTemplate>
+                     </ItemsControl.ItemTemplate>
+                 </ItemsControl>
+            </Grid>
         </Grid>
         
-        <!-- Animated Tab Switcher -->
-        <Border Grid.Row="1" 
-                Margin="0,0,0,16"
-                Background="#1A1A1A"
-                CornerRadius="10"
-                Width="380"
-                Height="44"
-                HorizontalAlignment="Left"
-                Padding="4">
-            <Grid>
-                <!-- Background Indicator -->
-                <Canvas>
-                    <Border Classes="tab-indicator"
-                            Canvas.Left="{Binding ActiveTabPosition}"
-                            Width="{Binding TabWidth}"
-                            Height="{Binding TabHeight}"
-                            Background="{DynamicResource SystemAccentBrush}"
-                            CornerRadius="8"/>
-                </Canvas>
-                
-                <!-- Tab Buttons -->
-                <Grid ColumnDefinitions="*, *, *" Height="{Binding TabHeight}">
-                    <Button Grid.Column="0" 
-                            Classes="tab-btn"
-                            Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='all'}"
-                            Command="{Binding SetFilterCommand}"
-                            CommandParameter="all">
-                        <TextBlock Text="{Binding NewsAll^}" 
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center"/>
-                    </Button>
-                    
-                    <Button Grid.Column="1" 
-                            Classes="tab-btn"
-                            Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='hytale'}"
-                            Command="{Binding SetFilterCommand}"
-                            CommandParameter="hytale">
-                        <TextBlock Text="{Binding NewsHytale^}" 
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center"/>
-                    </Button>
-                    
-                    <Button Grid.Column="2" 
-                            Classes="tab-btn"
-                            Classes.active="{Binding ActiveFilter, Converter={StaticResource StringEqualityConverter}, ConverterParameter='hyprism'}"
-                            Command="{Binding SetFilterCommand}"
-                            CommandParameter="hyprism">
-                        <TextBlock Text="{Binding NewsHyPrism^}" 
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center"/>
-                    </Button>
-                </Grid>
+        <!-- COLUMN 2: CENTER HUB (Transparent Placeholder) -->
+        <Grid Grid.Column="1" VerticalAlignment="Center" Width="400" Height="400">
+            <TransitioningContentControl Content="{Binding SelectedNewsItem.ImageUrl}">
+                <TransitioningContentControl.PageTransition>
+                    <trans:OffsetFadeTransition Duration="0:0:0.45" Offset="20" IsHorizontal="False" />
+                </TransitioningContentControl.PageTransition>
+                <TransitioningContentControl.ContentTemplate>
+                    <DataTemplate>
+                        <Border Width="320"
+                                Height="320"
+                                CornerRadius="160"
+                                ClipToBounds="True"
+                                BoxShadow="0 12 30 0 #50000000">
+                            <Grid>
+                                <asyncImageLoader:AdvancedImage Source="{Binding}" Stretch="UniformToFill">
+                                    <asyncImageLoader:AdvancedImage.RenderTransform>
+                                        <ScaleTransform ScaleX="1.15" ScaleY="1.15"/>
+                                    </asyncImageLoader:AdvancedImage.RenderTransform>
+                                </asyncImageLoader:AdvancedImage>
+                                <Border Background="#66000000"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </TransitioningContentControl.ContentTemplate>
+            </TransitioningContentControl>
+        </Grid>
+        
+        <!-- COLUMN 3: RIGHT CONTENT -->
+        <Border Grid.Column="2" Padding="60,0,60,0" VerticalAlignment="Center" MaxWidth="600">
+            <Grid MaxHeight="600" Height="520" ClipToBounds="True">
+                <TransitioningContentControl Content="{Binding SelectedNewsItem}"
+                                             VerticalContentAlignment="Center"
+                                             HorizontalContentAlignment="Stretch">
+                    <TransitioningContentControl.PageTransition>
+                        <trans:OffsetFadeTransition Duration="0:0:0.45" Offset="24" IsHorizontal="False" />
+                    </TransitioningContentControl.PageTransition>
+                    <TransitioningContentControl.ContentTemplate>
+                        <DataTemplate>
+                            <Grid IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform/>
+                                </Grid.RenderTransform>
+                                
+                                <StackPanel Spacing="18">
+                                    <!-- Title -->
+                                    <TextBlock Text="{Binding Title}" 
+                                               FontSize="28" 
+                                               FontWeight="Bold" 
+                                               Foreground="White" 
+                                               TextWrapping="Wrap"
+                                               LineHeight="36"
+                                               MaxLines="3"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    
+                                    <!-- Excerpt with Read More -->
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Foreground="#CCC" 
+                                                   FontSize="15" 
+                                                   LineHeight="24" 
+                                                   TextWrapping="Wrap"
+                                                   MaxLines="5"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding Excerpt}"/>
+                                        
+                                        <!-- Read More Link -->
+                                        <Button Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                CommandParameter="{Binding Url}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="0"
+                                                HorizontalAlignment="Left"
+                                                Cursor="Hand">
+                                            <Button.Styles>
+                                                <Style Selector="Button:pointerover">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Style>
+                                            </Button.Styles>
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="Read more" 
+                                                           Foreground="{DynamicResource SystemAccentBrush}"
+                                                           FontSize="15"
+                                                           FontWeight="SemiBold"/>
+                                                <svg:Svg Path="/Assets/Icons/chevron-right.svg" 
+                                                         Width="14" 
+                                                         Height="14"
+                                                         Css="svg { fill: {DynamicResource SystemAccentBrush}; }"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </TransitioningContentControl.ContentTemplate>
+                </TransitioningContentControl>
             </Grid>
         </Border>
-        
-        <!-- News List -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden">
-            <Panel>
-                <!-- Loading Indicator -->
-                <Border IsVisible="{Binding IsLoading}"
-                        Background="#11FFFFFF"
-                        CornerRadius="12"
-                        Padding="32"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                    <StackPanel Spacing="12" HorizontalAlignment="Center">
-                        <Border Width="32" 
-                                Height="32"
-                                BorderBrush="{DynamicResource SystemAccentBrush}"
-                                BorderThickness="3"
-                                CornerRadius="16"
-                                HorizontalAlignment="Center">
-                            <Border.Styles>
-                                <Style Selector="Border">
-                                    <Style.Animations>
-                                        <Animation Duration="0:0:1" IterationCount="INFINITE">
-                                            <KeyFrame Cue="0%">
-                                                <Setter Property="Opacity" Value="1"/>
-                                            </KeyFrame>
-                                            <KeyFrame Cue="50%">
-                                                <Setter Property="Opacity" Value="0.3"/>
-                                            </KeyFrame>
-                                            <KeyFrame Cue="100%">
-                                                <Setter Property="Opacity" Value="1"/>
-                                            </KeyFrame>
-                                        </Animation>
-                                    </Style.Animations>
-                                </Style>
-                            </Border.Styles>
-                        </Border>
-                        <TextBlock Text="{Binding NewsLoading^}"
-                                   Foreground="#999"
-                                   FontSize="12"/>
-                    </StackPanel>
-                </Border>
-                
-                <!-- Error Message -->
-                <Border IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
-                        Background="#33FF0000"
-                        BorderBrush="#FF0000"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        Padding="16"
-                        Margin="0,0,0,16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="{Binding ErrorMessage}"
-                                   Foreground="#FF4444"
-                                   FontSize="12"
-                                   TextWrapping="Wrap"/>
-                        <Button Content="Retry"
-                                Command="{Binding RefreshCommand}"
-                                Background="#444"
-                                Foreground="White"
-                                Padding="12,6"
-                                CornerRadius="6"
-                                HorizontalAlignment="Left"/>
-                    </StackPanel>
-                </Border>
-                
-                <!-- News Items -->
-                <ItemsControl ItemsSource="{Binding News}"
-                              IsVisible="{Binding !IsLoading}"
-                              Margin="0,0,0,20">
-                    <ItemsControl.Styles>
-                        <Style Selector="ItemsControl > ContentPresenter">
-                            <Setter Property="Opacity" Value="0"/>
-                            <Style.Animations>
-                                <Animation Duration="0:0:0.6" Easing="0.16,1,0.3,1" FillMode="Forward">
-                                    <KeyFrame Cue="0%">
-                                        <Setter Property="Opacity" Value="0"/>
-                                        <Setter Property="TranslateTransform.Y" Value="30"/>
-                                    </KeyFrame>
-                                    <KeyFrame Cue="100%">
-                                        <Setter Property="Opacity" Value="1"/>
-                                        <Setter Property="TranslateTransform.Y" Value="0"/>
-                                    </KeyFrame>
-                                </Animation>
-                            </Style.Animations>
-                        </Style>
-                    </ItemsControl.Styles>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <cards:NewsCard Command="{Binding $parent[UserControl].DataContext.OpenLinkCommand}"
-                                           CommandParameter="{Binding Url}"
-                                           Margin="0,0,0,12"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Panel>
-        </ScrollViewer>
+
     </Grid>
 </UserControl>

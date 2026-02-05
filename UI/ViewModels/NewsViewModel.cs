@@ -6,11 +6,81 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using HyPrism.Services;
 using HyPrism.Services.Core;
 using HyPrism.Models;
+using Avalonia.Threading;
 
 namespace HyPrism.UI.ViewModels;
+
+public class CircularNewsItem : ReactiveObject
+{
+    public NewsItemResponse Data { get; init; }
+    
+    // Properties for "Wheel" Layout
+    private double _translateX;
+    public double TranslateX
+    {
+        get => _translateX;
+        set => this.RaiseAndSetIfChanged(ref _translateX, value);
+    }
+    
+    private double _translateY;
+    public double TranslateY
+    {
+        get => _translateY;
+        set => this.RaiseAndSetIfChanged(ref _translateY, value);
+    }
+    
+    // Rotation angle
+    private double _angle;
+    public double Angle
+    {
+        get => _angle;
+        set => this.RaiseAndSetIfChanged(ref _angle, value);
+    }
+    
+    private double _opacity = 1.0;
+    public double Opacity
+    {
+        get => _opacity;
+        set => this.RaiseAndSetIfChanged(ref _opacity, value);
+    }
+    
+    private double _scale = 1.0;
+    public double Scale
+    {
+        get => _scale;
+        set => this.RaiseAndSetIfChanged(ref _scale, value);
+    }
+
+    private int _zIndex;
+    public int ZIndex
+    {
+        get => _zIndex;
+        set => this.RaiseAndSetIfChanged(ref _zIndex, value);
+    }
+    
+    private double _blurRadius;
+    public double BlurRadius
+    {
+        get => _blurRadius;
+        set => this.RaiseAndSetIfChanged(ref _blurRadius, value);
+    }
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
+
+    public CircularNewsItem(NewsItemResponse data)
+    {
+        Data = data;
+    }
+}
 
 public class NewsViewModel : ReactiveObject
 {
@@ -19,6 +89,26 @@ public class NewsViewModel : ReactiveObject
 
     private readonly List<NewsItemResponse> _allNews = new();
     
+    // Circular Navigation State
+    public ObservableCollection<CircularNewsItem> VisibleItems { get; } = new();
+    private int _selectedIndex = 0;
+    
+    // Smooth scrolling offset: 0 means perfectly centered, -1/+1 means transitioning
+    private double _scrollOffset = 0.0;
+    public double ScrollOffset
+    {
+        get => _scrollOffset;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _scrollOffset, value);
+            UpdateVisibleItems();
+        }
+    }
+    
+    // Config: How many items to show around the center.
+    // 3 above, 1 center, 3 below = 7 total.
+    private const int VISIBLE_WINDOW_RADIUS = 3; 
+
     // Reactive Localization Properties
     public IObservable<string> NewsTitle { get; }
     public IObservable<string> NewsAll { get; }
@@ -33,8 +123,17 @@ public class NewsViewModel : ReactiveObject
         set
         {
             this.RaiseAndSetIfChanged(ref _activeFilter, value);
-            FilterNews();            this.RaisePropertyChanged(nameof(ActiveTabPosition));
+            FilterNews();            
+            this.RaisePropertyChanged(nameof(ActiveTabPosition));
         }
+    }
+    
+    // Selection for new Layout
+    private NewsItemResponse? _selectedNewsItem;
+    public NewsItemResponse? SelectedNewsItem
+    {
+        get => _selectedNewsItem;
+        set => this.RaiseAndSetIfChanged(ref _selectedNewsItem, value);
     }
     
     // Tab switcher dimensions and positioning
@@ -84,6 +183,7 @@ public class NewsViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<string, Unit> SetFilterCommand { get; }
     public ReactiveCommand<string, Unit> OpenLinkCommand { get; }
+    public ReactiveCommand<int, Unit> ScrollCommand { get; } // -1 for Up, 1 for Down
     
     public NewsViewModel(NewsService newsService, BrowserService browserService)
     {
@@ -111,6 +211,11 @@ public class NewsViewModel : ReactiveObject
             {
                 _browserService.OpenURL(url);
             }
+        });
+
+        ScrollCommand = ReactiveCommand.Create<int>(delta => 
+        {
+             MoveSelection(delta);
         });
         
         _ = LoadNewsAsync();
@@ -145,36 +250,252 @@ public class NewsViewModel : ReactiveObject
     {
         News.Clear();
         
-        var filtered = ActiveFilter switch
+        var filteredSource = ActiveFilter switch
         {
             "hytale" => _allNews.Where(n => n.Source == "hytale"),
             "hyprism" => _allNews.Where(n => n.Source == "hyprism"),
             _ => _allNews
         };
         
-        foreach (var item in filtered)
+        var list = filteredSource.ToList();
+        foreach (var item in list)
         {
             News.Add(item);
         }
-    }
-    
-    private string FormatDate(string dateString)
-    {
-        if (DateTime.TryParse(dateString, out var date))
+
+        // Reset Selection
+        _selectedIndex = 0;
+        if (list.Count > 0)
         {
-            var now = DateTime.Now;
-            var diff = now - date;
+            SetSelectedNewsItemImmediate(list[0]);
+        }
+        else 
+        {
+            SetSelectedNewsItemImmediate(null);
+        }
+
+        UpdateVisibleItems();
+    }
+
+    private DispatcherTimer? _scrollTimer;
+    private readonly Stopwatch _scrollStopwatch = new();
+    private int _targetIndex;
+    private bool _isAnimating;
+    private System.Timers.Timer? _contentDebounceTimer;
+    private NewsItemResponse? _pendingSelectedItem;
+    private const int ContentDebounceMs = 460;
+    
+    private void MoveSelection(int delta)
+    {
+        if (News.Count == 0 || _isAnimating) return;
+        
+        int newIndex = Math.Clamp(_selectedIndex + delta, 0, News.Count - 1);
+        
+        if (newIndex != _selectedIndex)
+        {
+            _isAnimating = true;
+            _targetIndex = newIndex;
             
-            if (diff.TotalDays < 1)
-                return "Today";
-            if (diff.TotalDays < 2)
-                return "Yesterday";
-            if (diff.TotalDays < 7)
-                return $"{(int)diff.TotalDays} days ago";
+            // Update selected index BEFORE animation so new items appear in VisibleItems
+            _selectedIndex = _targetIndex;
+            SetSelectedNewsItemDebounced(News[_selectedIndex]);
             
-            return date.ToString("MMM d, yyyy");
+            // Update collection to include new items that will appear
+            UpdateVisibleItems();
+            
+            // Now animate from negative offset back to 0
+            // If delta is +1, we start at -1 and animate to 0
+            // If delta is -1, we start at +1 and animate to 0
+            ScrollOffset = -delta;
+            
+            // Animate ScrollOffset from -delta to 0 over time (time-based for smoothness)
+            const double durationMs = 300.0;
+            _scrollTimer?.Stop();
+            _scrollTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(16)
+            };
+
+            _scrollStopwatch.Restart();
+            _scrollTimer.Tick += (_, _) =>
+            {
+                double elapsed = _scrollStopwatch.Elapsed.TotalMilliseconds;
+                double progress = Math.Clamp(elapsed / durationMs, 0, 1);
+
+                // Ease-out cubic
+                progress = 1 - Math.Pow(1 - progress, 3);
+
+                ScrollOffset = -delta * (1 - progress);
+
+                if (progress >= 1)
+                {
+                    _scrollTimer?.Stop();
+                    ScrollOffset = 0;
+                    _isAnimating = false;
+                }
+            };
+            _scrollTimer.Start();
+        }
+    }
+
+    private void SetSelectedNewsItemImmediate(NewsItemResponse? item)
+    {
+        _contentDebounceTimer?.Stop();
+        _pendingSelectedItem = null;
+        SelectedNewsItem = item;
+    }
+
+    private void SetSelectedNewsItemDebounced(NewsItemResponse? item)
+    {
+        _pendingSelectedItem = item;
+        if (_contentDebounceTimer == null)
+        {
+            _contentDebounceTimer = new System.Timers.Timer(ContentDebounceMs)
+            {
+                AutoReset = false
+            };
+            _contentDebounceTimer.Elapsed += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    SelectedNewsItem = _pendingSelectedItem;
+                });
+            };
+        }
+        else
+        {
+            _contentDebounceTimer.Stop();
+            _contentDebounceTimer.Interval = ContentDebounceMs;
+        }
+
+        _contentDebounceTimer.Start();
+    }
+
+    private void UpdateVisibleItems()
+    {
+        if (News.Count == 0)
+        {
+            VisibleItems.Clear();
+            return;
         }
         
-        return dateString;
+        // We take a window around the selected index: e.g. [Selected-3, Selected+3]
+        int start = _selectedIndex - VISIBLE_WINDOW_RADIUS;
+        int end = _selectedIndex + VISIBLE_WINDOW_RADIUS;
+        
+        // Build list of indices we need
+        var neededIndices = new List<int>();
+        for (int i = start; i <= end; i++)
+        {
+            if (i >= 0 && i < News.Count)
+                neededIndices.Add(i);
+        }
+        
+        // Reuse existing items or create new ones
+        var newVisibleItems = new List<CircularNewsItem>();
+        
+        for (int idx = 0; idx < neededIndices.Count; idx++)
+        {
+            int i = neededIndices[idx];
+            var item = News[i];
+            
+            // Try to find existing item with same data
+            var existingItem = VisibleItems.FirstOrDefault(x => x.Data == item);
+            CircularNewsItem vm;
+            
+            if (existingItem != null)
+            {
+                vm = existingItem;
+            }
+            else
+            {
+                vm = new CircularNewsItem(item);
+            }
+             
+             // Calculate visual position relative to selection (center)
+             int relativeIndex = i - _selectedIndex; // -3, -2, -1, 0, 1, 2, 3
+             
+             // WHEEL MATH
+             // Center (0) is closest to the hub (Right most).
+             // We calculate X shift based on a circle equation to ensure consistent curvature.
+             
+             // Constants for the virtual circle
+             const double VIRTUAL_RADIUS = 500; // Large radius for gentle curve
+             const double ITEM_HEIGHT_ESTIMATE = 96; // 80px Item + 16px Spacing
+             
+             // Y position relative to center (approximate)
+             // Add extra spacing for items away from center to create "breathing" effect
+             double baseSpacing = 85;
+             double extraSpacing = Math.Abs(relativeIndex) > 0 ? Math.Abs(relativeIndex) * 3 : 0;
+             
+             // Apply ScrollOffset for smooth interpolation during transitions
+             double effectiveRelativeIndex = relativeIndex - _scrollOffset;
+             double relativeY = effectiveRelativeIndex * (baseSpacing + extraSpacing); 
+             vm.TranslateY = relativeY;
+             
+             // Circle Equation: x = sqrt(R^2 - y^2)
+             // We want the bulge (center) to be at X_MAX.
+             // At edges, x is smaller.
+             
+             double xOnCircle = Math.Sqrt(Math.Pow(VIRTUAL_RADIUS, 2) - Math.Pow(relativeY, 2));
+             
+             // Calculate the x for the furthest item in the window
+             double maxRelY = VISIBLE_WINDOW_RADIUS * ITEM_HEIGHT_ESTIMATE;
+             double minX = Math.Sqrt(Math.Pow(VIRTUAL_RADIUS, 2) - Math.Pow(maxRelY, 2));
+             
+             vm.TranslateX = (xOnCircle - minX) + 10; // +10 padding
+             
+             // Rotation based on effective position
+             double angleDeg = (effectiveRelativeIndex * 12); 
+             vm.Angle = -angleDeg;
+             
+             // Normalized distance for opacity/scale/blur (use effective index for smooth transition)
+             double normalizedDist = Math.Abs(effectiveRelativeIndex) / (double)VISIBLE_WINDOW_RADIUS;
+             
+             // Opacity & Scale (using normalized effective distance for smooth transitions)
+             vm.Opacity = Math.Max(0.05, 1.0 - (normalizedDist * 0.9));
+             vm.Scale = 1.0 - (normalizedDist * 0.15);
+             
+             // Z-Index: Center should be on top (use effective index for smooth transition)
+             vm.ZIndex = 100 - (int)(Math.Abs(effectiveRelativeIndex) * 10);
+
+             // Blur: smooth transition based on effective distance
+             vm.BlurRadius = Math.Abs(effectiveRelativeIndex) * 3.0;
+             
+             vm.IsSelected = (i == _selectedIndex);
+             
+             newVisibleItems.Add(vm);
+        }
+        
+        // Update VisibleItems collection efficiently
+        // Remove items that are no longer needed
+        for (int j = VisibleItems.Count - 1; j >= 0; j--)
+        {
+            if (!newVisibleItems.Contains(VisibleItems[j]))
+            {
+                VisibleItems.RemoveAt(j);
+            }
+        }
+        
+        // Add new items or reorder
+        for (int j = 0; j < newVisibleItems.Count; j++)
+        {
+            if (j >= VisibleItems.Count)
+            {
+                VisibleItems.Add(newVisibleItems[j]);
+            }
+            else if (VisibleItems[j] != newVisibleItems[j])
+            {
+                int oldIndex = VisibleItems.IndexOf(newVisibleItems[j]);
+                if (oldIndex >= 0)
+                {
+                    VisibleItems.Move(oldIndex, j);
+                }
+                else
+                {
+                    VisibleItems.Insert(j, newVisibleItems[j]);
+                }
+            }
+        }
     }
 }

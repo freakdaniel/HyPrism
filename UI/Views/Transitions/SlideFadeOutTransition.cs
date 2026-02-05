@@ -4,23 +4,23 @@ using Avalonia.Animation.Easings;
 using Avalonia.Media;
 using Avalonia.Styling;
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace HyPrism.UI.Views.Transitions
 {
-    public class OffsetFadeTransition : IPageTransition
+    public class SlideFadeOutTransition : IPageTransition
     {
-        public TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(500);
-        public double Offset { get; set; } = 20.0;
-        public bool IsHorizontal { get; set; } = true;
+        public TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(550);
+        public double Offset { get; set; } = 40.0;
+        public bool IsVertical { get; set; } = true;
 
         public async Task Start(Visual? from, Visual? to, bool forward, CancellationToken cancellationToken)
         {
-            var easing = new CubicEaseInOut();
+            var easing = new SineEaseInOut();
+            var exitOffset = forward ? -Offset : Offset;
+            var enterOffset = forward ? Offset : -Offset;
 
-            // Exit Animation (from)
             if (from != null)
             {
                 var animation = new Animation
@@ -33,8 +33,8 @@ namespace HyPrism.UI.Views.Transitions
                         new KeyFrame
                         {
                             Cue = new Cue(0),
-                            Setters = 
-                            { 
+                            Setters =
+                            {
                                 new Setter(Visual.OpacityProperty, 1.0),
                                 new Setter(TranslateTransform.XProperty, 0.0),
                                 new Setter(TranslateTransform.YProperty, 0.0)
@@ -43,11 +43,11 @@ namespace HyPrism.UI.Views.Transitions
                         new KeyFrame
                         {
                             Cue = new Cue(1),
-                            Setters = 
-                            { 
+                            Setters =
+                            {
                                 new Setter(Visual.OpacityProperty, 0.0),
-                                new Setter(TranslateTransform.XProperty, IsHorizontal ? -Offset : 0.0),
-                                new Setter(TranslateTransform.YProperty, IsHorizontal ? 0.0 : -Offset)
+                                new Setter(TranslateTransform.XProperty, IsVertical ? 0.0 : exitOffset),
+                                new Setter(TranslateTransform.YProperty, IsVertical ? exitOffset : 0.0)
                             }
                         }
                     }
@@ -55,11 +55,10 @@ namespace HyPrism.UI.Views.Transitions
                 await animation.RunAsync(from, cancellationToken);
             }
 
-            // Enter Animation (to)
             if (to != null)
             {
                 to.IsVisible = true;
-                
+
                 var animation = new Animation
                 {
                     FillMode = FillMode.Forward,
@@ -70,20 +69,18 @@ namespace HyPrism.UI.Views.Transitions
                         new KeyFrame
                         {
                             Cue = new Cue(0),
-                            Setters = 
-                            { 
+                            Setters =
+                            {
                                 new Setter(Visual.OpacityProperty, 0.0),
-                                new Setter(TranslateTransform.XProperty, IsHorizontal ? Offset : 0.0),
-                                new Setter(TranslateTransform.YProperty, IsHorizontal ? 0.0 : -Offset)
-                            } // Note: IsHorizontal ? 0.0 : -Offset for Y means for vertical it comes from ABOVE (-Offset)
-                              // User requested "Pop in with small shift down".
-                              // If Y starts at -Offset and ends at 0, it moves DOWN. Correct.
+                                new Setter(TranslateTransform.XProperty, IsVertical ? 0.0 : enterOffset),
+                                new Setter(TranslateTransform.YProperty, IsVertical ? enterOffset : 0.0)
+                            }
                         },
                         new KeyFrame
                         {
                             Cue = new Cue(1),
-                            Setters = 
-                            { 
+                            Setters =
+                            {
                                 new Setter(Visual.OpacityProperty, 1.0),
                                 new Setter(TranslateTransform.XProperty, 0.0),
                                 new Setter(TranslateTransform.YProperty, 0.0)

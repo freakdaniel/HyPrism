@@ -202,12 +202,12 @@
 
     </UserControl.Styles>
 
-    <Border Background="#F2111111" CornerRadius="12" BorderBrush="#33FFFFFF" BorderThickness="1" ClipToBounds="True" BoxShadow="0 10 30 5 #000000">
-        <Grid ColumnDefinitions="240, *">
-            
-            <!-- Sidebar -->
-            <Border Grid.Column="0" Background="#111111">
-                <Grid RowDefinitions="Auto, *">
+    <!-- Refactored for Integrated Look: Removed outer container borders/shadows -->
+    <Grid ColumnDefinitions="240, *">
+        
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto, *">
                     <TextBlock Text="{Binding SettingsTitle^}" Grid.Row="0" Margin="30,30,30,30" FontSize="28" FontWeight="SemiBold" Foreground="White" FontFamily="{StaticResource Poppins}"/>
                     
                     <ScrollViewer Grid.Row="1">
@@ -718,13 +718,12 @@
                     </Panel>
                 </ScrollViewer>
                 
-                <!-- Header / Close -->
-                <buttons:CloseButton Command="{Binding CloseCommand}"
-                                     HorizontalAlignment="Right"
-                                     VerticalAlignment="Top"
-                                     Margin="20,20,20,0"/>
-            </Grid>
+            <!-- Hidden Header / Close - No longer needed in integrated view -->
+            <!-- <buttons:CloseButton Command="{Binding CloseCommand}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="20,20,20,0"/> -->
         </Grid>
-    </Border>
+    </Grid>
 
 </UserControl>

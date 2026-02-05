@@ -18,6 +18,14 @@ using System.IO;
 
 namespace HyPrism.UI.ViewModels;
 
+public enum NavigationPage
+{
+    Home,
+    News,
+    Settings,
+    Mods
+}
+
 public class DashboardViewModel : ReactiveObject
 {
     private readonly GameSessionService _gameSessionService;
@@ -61,47 +69,23 @@ public class DashboardViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _modManagerViewModel, value);
     }
 
-    // Overlay State
-    private bool _isSettingsOpen;
-    public bool IsSettingsOpen
+    // Navigation State
+    private NavigationPage _currentPage = NavigationPage.Home;
+    public NavigationPage CurrentPage
     {
-        get => _isSettingsOpen;
+        get => _currentPage;
         set 
         {
-            if (_isSettingsOpen != value)
-            {
-                this.RaiseAndSetIfChanged(ref _isSettingsOpen, value);
-                if (value)
-                {
-                    _isConfigOpen = false;
-                    this.RaisePropertyChanged(nameof(IsModsOpen));
-                    _isProfileEditorOpen = false;
-                    this.RaisePropertyChanged(nameof(IsProfileEditorOpen));
-                }
-            }
+            this.RaiseAndSetIfChanged(ref _currentPage, value);
+            // Dynamic Background Logic: Only visible on Home
+            BackgroundOpacity = value == NavigationPage.Home ? 1.0 : 0.0;
         }
     }
-    
-    private bool _isConfigOpen; // For ModManager
-    public bool IsModsOpen
-    {
-        get => _isConfigOpen;
-        set
-        {
-            if (_isConfigOpen != value)
-            {
-                _isConfigOpen = value;
-                this.RaisePropertyChanged();
-                if (value)
-                {
-                    _isSettingsOpen = false;
-                    this.RaisePropertyChanged(nameof(IsSettingsOpen));
-                    _isProfileEditorOpen = false;
-                    this.RaisePropertyChanged(nameof(IsProfileEditorOpen));
-                }
-            }
-        }
-    }
+
+    // Commands to switch pages directly
+    public ReactiveCommand<NavigationPage, Unit> NavigateCommand { get; }
+
+    // Overlay State (Modals only)
     
     private bool _isProfileEditorOpen;
     public bool IsProfileEditorOpen
@@ -113,13 +97,6 @@ public class DashboardViewModel : ReactiveObject
             {
                 _isProfileEditorOpen = value;
                 this.RaisePropertyChanged();
-                if (value)
-                {
-                    _isSettingsOpen = false;
-                    this.RaisePropertyChanged(nameof(IsSettingsOpen));
-                    _isConfigOpen = false;
-                    this.RaisePropertyChanged(nameof(IsModsOpen));
-                }
             }
         }
     }
@@ -276,25 +253,38 @@ public class DashboardViewModel : ReactiveObject
 
         // --- Setup Overlay State ---
         _isOverlayOpen = this.WhenAnyValue(
-                x => x.IsSettingsOpen, 
-                x => x.IsModsOpen, 
                 x => x.IsProfileEditorOpen,
                 x => x.IsErrorModalOpen,
-                (s, m, p, e) => s || m || p || e)
+                (p, e) => p || e)
             .ToProperty(this, x => x.IsOverlayOpen);
 
         // --- Setup Actions ---
-        Action toggleSettingsAction = () => IsSettingsOpen = !IsSettingsOpen;
+        NavigateCommand = ReactiveCommand.Create<NavigationPage>(p => CurrentPage = p);
+
+        // Map legacy toggles to navigation
+        Action toggleSettingsAction = () => 
+        {
+            if (CurrentPage == NavigationPage.Settings) 
+                CurrentPage = NavigationPage.Home;
+            else 
+                CurrentPage = NavigationPage.Settings;
+        };
+
         Action toggleProfileEditorAction = () => { _ = ToggleProfileEditorAsync(); };
+        
         Action<string, int> toggleModsAction = (branchName, version) =>
         {
-            if (!IsModsOpen)
+            if (CurrentPage != NavigationPage.Mods)
             {
                 var branch = branchName?.ToLower().Replace(" ", "-") ?? "release"; 
                 ModManagerViewModel = new ModManagerViewModel(_modService, _instanceService, branch, version);
-                ModManagerViewModel.CloseCommand.Subscribe(_ => IsModsOpen = false);
+                ModManagerViewModel.CloseCommand.Subscribe(_ => CurrentPage = NavigationPage.Home);
+                CurrentPage = NavigationPage.Mods;
             }
-            IsModsOpen = !IsModsOpen;
+            else
+            {
+                CurrentPage = NavigationPage.Home;
+            }
         };
 
         // --- Initialize Child ViewModels ---
@@ -314,7 +304,7 @@ public class DashboardViewModel : ReactiveObject
             gitHubService,
             _browserService,
             _appPathConfiguration);
-        SettingsViewModel.CloseCommand.Subscribe(_ => IsSettingsOpen = false);
+        SettingsViewModel.CloseCommand.Subscribe(_ => CurrentPage = NavigationPage.Home);
 
         // --- Commands ---
         CloseErrorModalCommand = ReactiveCommand.Create(() => { IsErrorModalOpen = false; });
