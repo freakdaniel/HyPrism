@@ -76,7 +76,10 @@
       "title": "Instanzverwaltung",
       "description": "Verwalten Sie Ihre installierten Spielversionen",
       "openFolder": "Ordner öffnen",
-      "delete": "Instanz löschen"
+      "delete": "Instanz löschen",
+      "launchBranch": "Start-Branch",
+      "userData": "Benutzerdaten",
+      "empty": "Sieht so aus, als hättest du noch nichts heruntergeladen."
     },
     "aboutSettings": {
       "title": "HyPrism Launcher",

@@ -73,6 +73,23 @@ public class VersionService
         return result;
     }
 
+    public bool TryGetCachedVersions(string branch, TimeSpan maxAge, out List<int> versions)
+    {
+        versions = new List<int>();
+        var normalizedBranch = NormalizeBranch(branch);
+        string osName = UtilityService.GetOS();
+        string arch = UtilityService.GetArch();
+
+        var cached = TryLoadFreshVersionsCache(normalizedBranch, osName, arch, maxAge);
+        if (cached == null)
+        {
+            return false;
+        }
+
+        versions = cached;
+        return versions.Count > 0;
+    }
+
     /// <summary>
     /// Check if a specific version exists on the server.
     /// </summary>

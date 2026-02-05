@@ -11,6 +11,7 @@
              <!-- ZIndex handled in code-behind to avoid StaticResource resolution issues -->
 
     <UserControl.Resources>
+        <cv:StringEqualityConverter x:Key="StringEqualityConverter"/>
     </UserControl.Resources>
     
     <UserControl.Styles>
@@ -106,6 +107,24 @@
                  </Transitions>
              </Setter>
         </Style>
+
+        <Style Selector="Canvas#DropdownPlaceholder.down">
+            <Setter Property="Grid.Row" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+
+        <Style Selector="Canvas#DropdownPlaceholder.up">
+            <Setter Property="Grid.Row" Value="0"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+        </Style>
+
+        <Style Selector="Grid#DropdownContainer.down">
+            <Setter Property="Canvas.Top" Value="4"/>
+        </Style>
+
+        <Style Selector="Grid#DropdownContainer.up">
+            <Setter Property="Canvas.Bottom" Value="4"/>
+        </Style>
         
         <Style Selector="Grid#DropdownContainer.expanded">
              <Setter Property="IsHitTestVisible" Value="True"/>
@@ -180,12 +199,17 @@
         
         <!-- ROW 1: The Overlay Dropdown -->
         <!-- We use a Canvas to break out of flow layout but stay in visual tree -->
-        <Canvas Grid.Row="1" Height="0" VerticalAlignment="Top" HorizontalAlignment="Stretch" ClipToBounds="False">
+        <Canvas Name="DropdownPlaceholder"
+            Classes.down="{Binding ElementName=Root, Path=Direction, Converter={StaticResource StringEqualityConverter}, ConverterParameter=Down}"
+            Classes.up="{Binding ElementName=Root, Path=Direction, Converter={StaticResource StringEqualityConverter}, ConverterParameter=Up}"
+            Height="0"
+            HorizontalAlignment="Stretch"
+            ClipToBounds="False">
              <Grid Name="DropdownContainer"
-                   Classes.expanded="{Binding ElementName=Root, Path=IsExpanded}"
-                   Width="{Binding Bounds.Width, ElementName=DropdownToggle}"
-                   Margin="0,4,0,0"
-                   ClipToBounds="False">
+                 Classes.expanded="{Binding ElementName=Root, Path=IsExpanded}"
+               Classes.down="{Binding ElementName=Root, Path=Direction, Converter={StaticResource StringEqualityConverter}, ConverterParameter=Down}"
+               Classes.up="{Binding ElementName=Root, Path=Direction, Converter={StaticResource StringEqualityConverter}, ConverterParameter=Up}"
+                 ClipToBounds="False">
                    
                     <Border Background="#1E1E1E"
                         BorderBrush="#333"

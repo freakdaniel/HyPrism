@@ -76,7 +76,10 @@
       "title": "인스턴스 관리",
       "description": "설치된 게임 버전 관리",
       "openFolder": "폴더 열기",
-      "delete": "인스턴스 삭제"
+      "delete": "인스턴스 삭제",
+      "launchBranch": "실행 브랜치",
+      "userData": "사용자 데이터",
+      "empty": "아직 아무것도 다운로드하지 않은 것 같아요."
     },
     "aboutSettings": {
       "title": "HyPrism 런처",

@@ -89,6 +89,7 @@ public class MainViewModel : ReactiveObject
             modService,
             instanceService,
             configService,
+            versionService,
             fileService,
             progressService,
             browserService,
@@ -124,17 +125,6 @@ public class MainViewModel : ReactiveObject
             {
                 LoadingViewModel.Update("loading", "Loading Localization...", 20);
                 await Task.Delay(300);
-
-                LoadingViewModel.Update("loading", "Loading Versions...", 40);
-                try
-                {
-                    var branch = _configService.Configuration.VersionType;
-                    await _versionService.GetVersionListAsync(branch);
-                }
-                catch (Exception ex)
-                {
-                    Services.Core.Logger.Warning("Startup", $"Failed to preload versions: {ex.Message}");
-                }
 
                 // TODO: Read this setting from DashboardViewModel if possible or service
                 // For now, assuming we want to load news

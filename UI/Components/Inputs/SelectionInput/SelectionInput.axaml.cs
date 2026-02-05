@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -10,6 +9,12 @@ using System.Collections;
 using System;
 
 namespace HyPrism.UI.Components.Inputs;
+
+public enum SelectionInputDirection
+{
+    Down,
+    Up
+}
 
 public partial class SelectionInput : UserControl
 {
@@ -65,6 +70,15 @@ public partial class SelectionInput : UserControl
     {
         get => GetValue(IsExpandedProperty);
         set => SetValue(IsExpandedProperty, value);
+    }
+
+    public static readonly StyledProperty<SelectionInputDirection> DirectionProperty =
+        AvaloniaProperty.Register<SelectionInput, SelectionInputDirection>(nameof(Direction), SelectionInputDirection.Down);
+
+    public SelectionInputDirection Direction
+    {
+        get => GetValue(DirectionProperty);
+        set => SetValue(DirectionProperty, value);
     }
     
     private bool _updatingSelection;
@@ -147,4 +161,5 @@ public partial class SelectionInput : UserControl
              }
         }
     }
+
 }

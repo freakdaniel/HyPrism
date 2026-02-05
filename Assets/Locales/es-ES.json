@@ -76,7 +76,10 @@
       "title": "Gestión de instancias",
       "description": "Gestiona tus versiones instaladas del juego",
       "openFolder": "Abrir carpeta",
-      "delete": "Eliminar instancia"
+      "delete": "Eliminar instancia",
+      "launchBranch": "Rama de inicio",
+      "userData": "Datos de usuario",
+      "empty": "Parece que aún no has descargado nada."
     },
     "aboutSettings": {
       "title": "Lanzador HyPrism",

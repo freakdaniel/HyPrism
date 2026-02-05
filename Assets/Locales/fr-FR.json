@@ -76,7 +76,10 @@
       "title": "Gestion des instances",
       "description": "Gérez vos versions de jeu installées",
       "openFolder": "Ouvrir le dossier",
-      "delete": "Supprimer l'instance"
+      "delete": "Supprimer l'instance",
+      "launchBranch": "Branche de lancement",
+      "userData": "Données utilisateur",
+      "empty": "On dirait que vous n'avez encore rien téléchargé."
     },
     "aboutSettings": {
       "title": "Lanceur HyPrism",

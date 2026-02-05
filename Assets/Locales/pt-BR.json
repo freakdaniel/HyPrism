@@ -76,7 +76,10 @@
       "title": "Gerenciamento de Instâncias",
       "description": "Gerencie suas versões instaladas do jogo",
       "openFolder": "Abrir Pasta",
-      "delete": "Excluir Instância"
+      "delete": "Excluir Instância",
+      "launchBranch": "Ramificação de início",
+      "userData": "Dados do usuário",
+      "empty": "Parece que você ainda não baixou nada."
     },
     "aboutSettings": {
       "title": "Launcher HyPrism",

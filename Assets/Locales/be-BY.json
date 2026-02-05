@@ -78,7 +78,10 @@
       "title": "Instance Management",
       "description": "Manage your installed game versions.",
       "openFolder": "Open Folder",
-      "delete": "Delete Instance"
+      "delete": "Delete Instance",
+      "launchBranch": "Галіна запуску",
+      "userData": "Карыстальніцкія даныя",
+      "empty": "Падаецца, вы яшчэ нічога не спампавалі."
     },
     "aboutSettings": {
       "title": "Лаунчар HyPrism",

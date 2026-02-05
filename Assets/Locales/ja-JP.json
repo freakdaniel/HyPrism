@@ -76,7 +76,10 @@
       "title": "インスタンス管理",
       "description": "インストールされたゲームバージョンの管理",
       "openFolder": "フォルダを開く",
-      "delete": "インスタンスを削除"
+      "delete": "インスタンスを削除",
+      "launchBranch": "起動ブランチ",
+      "userData": "ユーザーデータ",
+      "empty": "まだ何もダウンロードしていないようです。"
     },
     "aboutSettings": {
       "title": "HyPrism ランチャー",

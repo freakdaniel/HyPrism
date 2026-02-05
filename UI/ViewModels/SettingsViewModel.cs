@@ -16,6 +16,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 
 using System.Windows.Input;
 using HyPrism.UI.Helpers;
@@ -98,6 +99,7 @@ public class SettingsViewModel : ReactiveObject
     private readonly FileService _fileService;
     private readonly GitHubService _gitHubService;
     private readonly BrowserService _browserService;
+    private readonly VersionService _versionService;
     
     public LocalizationService Localization { get; }
 
@@ -164,6 +166,10 @@ public class SettingsViewModel : ReactiveObject
     public IObservable<string> InstancesDesc { get; }
     public IObservable<string> InstancesOpenFolder { get; }
     public IObservable<string> InstancesDelete { get; }
+    public IObservable<string> InstancesLaunchBranch { get; }
+    public IObservable<string> InstancesEmpty { get; }
+    public IObservable<string> InstancesUserData { get; }
+    public IObservable<string> InstancesLatest { get; }
     
     // About
     public IObservable<string> AboutTitle { get; }
@@ -250,6 +256,20 @@ public class SettingsViewModel : ReactiveObject
         get => _branchItems;
         set => this.RaiseAndSetIfChanged(ref _branchItems, value);
     }
+
+    private List<BranchItem> _launchBranchItems = new();
+    public List<BranchItem> LaunchBranchItems
+    {
+        get => _launchBranchItems;
+        set => this.RaiseAndSetIfChanged(ref _launchBranchItems, value);
+    }
+
+    private List<int> _launchVersions = new();
+    public List<int> LaunchVersions
+    {
+        get => _launchVersions;
+        set => this.RaiseAndSetIfChanged(ref _launchVersions, value);
+    }
     
     private BranchItem? _selectedBranchItem;
     public BranchItem? SelectedBranchItem
@@ -265,6 +285,36 @@ public class SettingsViewModel : ReactiveObject
             {
                 _settingsService.SetLauncherBranch(value.Value);
             }
+        }
+    }
+
+    private BranchItem? _selectedLaunchBranchItem;
+    public BranchItem? SelectedLaunchBranchItem
+    {
+        get => _selectedLaunchBranchItem;
+        set
+        {
+            var old = _selectedLaunchBranchItem;
+            this.RaiseAndSetIfChanged(ref _selectedLaunchBranchItem, value);
+
+            if (value != null && (old == null || old.Value != value.Value))
+            {
+                _configService.Configuration.VersionType = UtilityService.NormalizeVersionType(value.Value);
+                _configService.SaveConfig();
+                _ = RefreshLaunchVersionsAsync();
+            }
+        }
+    }
+
+    private int? _selectedLaunchVersion;
+    public int? SelectedLaunchVersion
+    {
+        get => _selectedLaunchVersion;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedLaunchVersion, value);
+            _configService.Configuration.SelectedVersion = value ?? 0;
+            _configService.SaveConfig();
         }
     }
     
@@ -342,7 +392,8 @@ public class SettingsViewModel : ReactiveObject
         FileService fileService,
         GitHubService gitHubService,
         BrowserService browserService,
-        AppPathConfiguration appPathConfiguration)
+        AppPathConfiguration appPathConfiguration,
+        VersionService versionService)
     {
         _settingsService = settingsService;
         _configService = configService;
@@ -353,6 +404,7 @@ public class SettingsViewModel : ReactiveObject
         _browserService = browserService;
         Localization = localizationService;
         _appPathConfiguration = appPathConfiguration;
+        _versionService = versionService;
         
         // Initialize reactive localization properties - these will update automatically
         var loc = Localization;
@@ -416,6 +468,10 @@ public class SettingsViewModel : ReactiveObject
         InstancesDesc = loc.GetObservable("settings.instanceSettings.description");
         InstancesOpenFolder = loc.GetObservable("settings.instanceSettings.openFolder");
         InstancesDelete = loc.GetObservable("settings.instanceSettings.delete");
+        InstancesLaunchBranch = loc.GetObservable("settings.instanceSettings.launchBranch");
+        InstancesEmpty = loc.GetObservable("settings.instanceSettings.empty");
+        InstancesUserData = loc.GetObservable("settings.instanceSettings.userData");
+        InstancesLatest = loc.GetObservable("main.latest");
         
         // About
         AboutTitle = loc.GetObservable("settings.aboutSettings.title");
@@ -450,6 +506,21 @@ public class SettingsViewModel : ReactiveObject
                 var current = _settingsService.GetLauncherBranch();
                 SelectedBranchItem = items.FirstOrDefault(x => x.Value == current) ?? items.FirstOrDefault();
             });
+
+        Observable.CombineLatest(
+            loc.GetObservable("main.release"),
+            loc.GetObservable("main.preRelease"),
+            (release, preRelease) => new List<BranchItem>
+            {
+                new BranchItem { DisplayName = release, Value = "release" },
+                new BranchItem { DisplayName = preRelease, Value = "pre-release" }
+            })
+            .Subscribe(items =>
+            {
+                LaunchBranchItems = items;
+                var current = UtilityService.NormalizeVersionType(_configService.Configuration.VersionType);
+                SelectedLaunchBranchItem = items.FirstOrDefault(x => x.Value == current) ?? items.FirstOrDefault();
+            });
         
         // Initialize language items - load names from locale files
         LanguageItems = LocalizationService.GetAvailableLanguages()
@@ -481,6 +552,10 @@ public class SettingsViewModel : ReactiveObject
         // Initialize branch selection
         var currentBranch = _settingsService.GetLauncherBranch();
         _selectedBranchItem = BranchItems.FirstOrDefault(b => b.Value == currentBranch) ?? BranchItems[0];
+
+        var currentLaunchBranch = UtilityService.NormalizeVersionType(_configService.Configuration.VersionType);
+        _selectedLaunchBranchItem = LaunchBranchItems.FirstOrDefault(b => b.Value == currentLaunchBranch) ?? LaunchBranchItems.FirstOrDefault();
+        _selectedLaunchVersion = _configService.Configuration.SelectedVersion == 0 ? null : _configService.Configuration.SelectedVersion;
         
         // Initialize language selection
         var currentLanguage = _configService.Configuration.Language;
@@ -554,6 +629,46 @@ public class SettingsViewModel : ReactiveObject
 
         // Initial load
         RefreshInstances();
+        _ = RefreshLaunchVersionsAsync();
+    }
+
+    private async Task RefreshLaunchVersionsAsync()
+    {
+        try
+        {
+            var branch = UtilityService.NormalizeVersionType(SelectedLaunchBranchItem?.Value ?? _configService.Configuration.VersionType);
+
+            List<int> versions;
+            if (_versionService.TryGetCachedVersions(branch, TimeSpan.FromMinutes(15), out var cached) && cached.Count > 0)
+            {
+                versions = cached;
+            }
+            else
+            {
+                versions = await _versionService.GetVersionListAsync(branch);
+            }
+
+            versions = versions.OrderByDescending(x => x).ToList();
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                LaunchVersions = versions;
+
+                var configured = _configService.Configuration.SelectedVersion;
+                if (configured > 0 && versions.Contains(configured))
+                {
+                    SelectedLaunchVersion = configured;
+                }
+                else
+                {
+                    SelectedLaunchVersion = null;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("SettingsViewModel", $"Failed to load launch versions: {ex.Message}");
+        }
     }
 
     private void OnBackgroundChanged(string? mode)

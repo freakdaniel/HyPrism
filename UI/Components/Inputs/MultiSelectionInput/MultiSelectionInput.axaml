@@ -1,0 +1,210 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:svg="clr-namespace:Avalonia.Svg.Skia;assembly=Avalonia.Svg.Skia"
+             xmlns:cv="using:HyPrism.UI.Converters"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="120"
+             x:Class="HyPrism.UI.Components.Inputs.MultiSelectionInput"
+             x:Name="Root"
+             ClipToBounds="False">
+
+    <UserControl.Resources>
+        <cv:StringEqualityConverter x:Key="StringEqualityConverter"/>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="ToggleButton.InputToggle">
+            <Setter Property="Background" Value="#252525"/>
+            <Setter Property="BorderBrush" Value="#333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="RenderTransform" Value="none" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="CubicEaseOut"/>
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ToggleButton.InputToggle:pointerover">
+            <Setter Property="Background" Value="#303030"/>
+        </Style>
+        <Style Selector="ToggleButton.InputToggle:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.98)" />
+            <Setter Property="Background" Value="#151515"/>
+        </Style>
+
+        <Style Selector="ToggleButton.InputToggle:checked svg|Svg.Chevron">
+            <Setter Property="RenderTransform" Value="rotate(0deg)"/>
+        </Style>
+        <Style Selector="ToggleButton.InputToggle:unchecked svg|Svg.Chevron">
+            <Setter Property="RenderTransform" Value="rotate(180deg)"/>
+        </Style>
+
+        <Style Selector="ListBox.MultiSelectionList">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style Selector="ListBox.MultiSelectionList ListBoxItem">
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#DDDDDD"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style Selector="ListBox.MultiSelectionList ListBoxItem /template/ ContentPresenter">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="ListBox.MultiSelectionList ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1AFFFFFF"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="ListBox.MultiSelectionList ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SystemAccentBrush}"/>
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
+
+        <Style Selector="Grid#DropdownContainer">
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="RenderTransform" Value="scaleY(0.9) translateY(-10px)"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" Easing="CubicEaseOut"/>
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="Grid#DropdownContainer.expanded">
+            <Setter Property="IsHitTestVisible" Value="True"/>
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="RenderTransform" Value="scaleY(1) translateY(0px)"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto, Auto" ClipToBounds="False">
+        <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="{Binding ElementName=Root, Path=Label}"
+                       FontSize="15"
+                       FontWeight="SemiBold"
+                       Foreground="White"
+                       IsVisible="{Binding ElementName=Root, Path=Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <ToggleButton Name="DropdownToggle"
+                          Classes="InputToggle"
+                          Height="44"
+                          IsChecked="{Binding ElementName=Root, Path=IsExpanded, Mode=TwoWay}">
+                <Grid ColumnDefinitions="*, Auto">
+                    <ContentControl Grid.Column="0"
+                                   Content="{Binding ElementName=Root, Path=SelectedItem}"
+                                   ContentTemplate="{Binding ElementName=Root, Path=ItemTemplate}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left">
+                        <ContentControl.DataTemplates>
+                            <DataTemplate DataType="x:String">
+                                <TextBlock Text="{Binding}" FontSize="14" Foreground="White" />
+                            </DataTemplate>
+                            <DataTemplate DataType="x:Object">
+                                <TextBlock Text="{Binding}" FontSize="14" Foreground="White"/>
+                            </DataTemplate>
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ElementName=Root, Path=Placeholder}"
+                               IsVisible="{Binding ElementName=Root, Path=SelectedItem, Converter={x:Static ObjectConverters.IsNull}}"
+                               Foreground="Gray"
+                               FontSize="14"
+                               VerticalAlignment="Center"/>
+
+                    <svg:Svg Grid.Column="1"
+                             Classes="Chevron"
+                             Path="/Assets/Icons/chevron-up.svg"
+                             Width="16" Height="16"
+                             Margin="10,0,0,0">
+                        <svg:Svg.Transitions>
+                            <Transitions>
+                                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </svg:Svg.Transitions>
+                    </svg:Svg>
+                </Grid>
+            </ToggleButton>
+        </StackPanel>
+
+        <Canvas Name="DropdownPlaceholder"
+            Grid.Row="1"
+                Height="0"
+                HorizontalAlignment="Stretch"
+                ClipToBounds="False">
+            <Grid Name="DropdownContainer"
+                Classes.expanded="{Binding ElementName=Root, Path=IsExpanded}"
+                ClipToBounds="False"
+            Canvas.Top="8">
+
+                <Border Background="#1E1E1E"
+                        BorderBrush="#333"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="0"
+                        MaxHeight="320"
+                        BoxShadow="0 8 32 0 #66000000">
+                    <Grid RowDefinitions="Auto, *">
+                        <Border Background="#202020"
+                                BorderBrush="#333"
+                                BorderThickness="0,0,0,1"
+                                Padding="10">
+                            <ContentPresenter Content="{Binding ElementName=Root, Path=HeaderContent}"
+                                              ContentTemplate="{Binding ElementName=Root, Path=HeaderTemplate}"/>
+                        </Border>
+
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding ElementName=Root, Path=ItemsSource}"
+                                 SelectedItem="{Binding ElementName=Root, Path=SelectedItem, Mode=TwoWay}"
+                                 SelectedItems="{Binding ElementName=Root, Path=SelectedItems, Mode=TwoWay}"
+                                 SelectionMode="{Binding ElementName=Root, Path=SelectionMode}"
+                                 ItemTemplate="{Binding ElementName=Root, Path=ItemTemplate}"
+                                 Classes="MultiSelectionList"
+                                 Background="Transparent"
+                                 MaxHeight="240"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 SelectionChanged="OnListBoxSelectionChanged">
+                            <ListBox.Styles>
+                                <Style Selector="ListBox">
+                                    <Setter Property="Padding" Value="8"/>
+                                </Style>
+                            </ListBox.Styles>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Canvas>
+    </Grid>
+</UserControl>

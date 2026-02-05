@@ -77,7 +77,10 @@
       "title": "Instance Management",
       "description": "Manage your installed game versions.",
       "openFolder": "Open Folder",
-      "delete": "Delete Instance"
+      "delete": "Delete Instance",
+      "launchBranch": "Launch branch",
+      "userData": "User data",
+      "empty": "Seems like you haven't downloaded anything yet"
     },
     "aboutSettings": {
       "title": "HyPrism Launcher",

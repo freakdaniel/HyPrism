@@ -25,6 +25,7 @@ public class DashboardViewModel : ReactiveObject
     private readonly ModService _modService;
     private readonly InstanceService _instanceService;
     private readonly ConfigService _configService;
+    private readonly VersionService _versionService;
     private readonly FileService _fileService;
     private readonly ProgressNotificationService _progressService;
     private readonly BrowserService _browserService;
@@ -257,6 +258,7 @@ public class DashboardViewModel : ReactiveObject
         ModService modService,
         InstanceService instanceService,
         ConfigService configService,
+        VersionService versionService,
         FileService fileService,
         ProgressNotificationService progressService,
         BrowserService browserService,
@@ -273,6 +275,7 @@ public class DashboardViewModel : ReactiveObject
         _modService = modService;
         _instanceService = instanceService;
         _configService = configService;
+        _versionService = versionService;
         _fileService = fileService;
         _progressService = progressService;
         _browserService = browserService;
@@ -319,6 +322,7 @@ public class DashboardViewModel : ReactiveObject
 
         // --- Setup Actions ---
         Action toggleSettingsAction = () => IsSettingsOpen = !IsSettingsOpen;
+        Action openInstancesAction = OpenInstancesSettings;
         Action toggleProfileEditorAction = () => { _ = ToggleProfileEditorAsync(); };
         Action<string, int> toggleModsAction = (branchName, version) =>
         {
@@ -333,7 +337,7 @@ public class DashboardViewModel : ReactiveObject
 
         // --- Initialize Child ViewModels ---
         HeaderViewModel = new HeaderViewModel(_configService, toggleProfileEditorAction, toggleSettingsAction);
-        GameControlViewModel = new GameControlViewModel(_instanceService, _fileService, _gameProcessService, toggleModsAction, toggleSettingsAction, LaunchAsync);
+        GameControlViewModel = new GameControlViewModel(_instanceService, _fileService, _gameProcessService, _configService, _versionService, toggleModsAction, toggleSettingsAction, openInstancesAction, LaunchAsync);
         NewsViewModel = new NewsViewModel(_newsService, _browserService);
         
         // Lazy-load settings if possible, or init straight away
@@ -347,7 +351,8 @@ public class DashboardViewModel : ReactiveObject
             _fileService,
             gitHubService,
             _browserService,
-            _appPathConfiguration);
+            _appPathConfiguration,
+            _versionService);
         SettingsViewModel.CloseCommand.Subscribe(_ => IsSettingsOpen = false);
 
         // --- Commands ---
@@ -572,5 +577,17 @@ public class DashboardViewModel : ReactiveObject
             var path = $"avares://HyPrism/Assets/Images/Backgrounds/{mode}";
             _ = ChangeBackgroundAsync(path);
         }
+    }
+
+    private void OpenInstancesSettings()
+    {
+        if (SettingsViewModel == null)
+        {
+            return;
+        }
+
+        SettingsViewModel.ActiveTab = "instances";
+        IsSettingsOpen = true;
+        SettingsViewModel.RefreshInstancesCommand.Execute().Subscribe();
     }
 }

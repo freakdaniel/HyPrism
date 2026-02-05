@@ -8,6 +8,58 @@
              mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="100"
              x:Class="HyPrism.UI.Components.Dashboard.GameControlBar"
              x:DataType="vm:Dashboard.GameControlViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.VersionAreaButton">
+            <Setter Property="Background" Value="#2a2a2a"/>
+            <Setter Property="BorderBrush" Value="#333333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="CornerRadius" Value="10,0,0,10"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.VersionAreaButton /template/ Border">
+            <Setter Property="RenderTransform" Value="scale(1)"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.VersionAreaButton:pointerover /template/ Border">
+            <Setter Property="Background" Value="#333333"/>
+            <Setter Property="Opacity" Value="0.9"/>
+            <Setter Property="RenderTransform" Value="scale(0.97)"/>
+        </Style>
+        <Style Selector="Button.VersionAreaButton:pressed /template/ Border">
+            <Setter Property="Background" Value="#252525"/>
+            <Setter Property="Opacity" Value="0.85"/>
+            <Setter Property="RenderTransform" Value="scale(0.95)"/>
+        </Style>
+        <Style Selector="Button.VersionAreaButton TextBlock">
+            <Setter Property="Foreground" Value="#ddd"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+    </UserControl.Styles>
     
     <Grid>
         <!-- BOTTOM LEFT: Action Buttons -->
@@ -54,43 +106,42 @@
             <Run Text="{Binding MainBuyIt^}" Foreground="{DynamicResource SystemAccentBrush}" FontSize="12" FontWeight="Bold"/>
         </TextBlock>
         
-        <!-- BOTTOM RIGHT: Version Selector + Play Button -->
-        <StackPanel VerticalAlignment="Bottom" 
-                    HorizontalAlignment="Right"
-                    Orientation="Horizontal"
-                    Spacing="12">
-            <!-- Version Selector -->
-            <Border Background="#2a2a2a"
-                    Padding="12,0"
-                    Height="50"
-                    CornerRadius="8">
-                <StackPanel Orientation="Horizontal" 
-                                    Spacing="8"
-                                    VerticalAlignment="Center">
-                    <svg:Svg Path="/Assets/Icons/git-branch.svg" Width="18" Height="18"/>
-                    <TextBlock Text="Release" 
-                               FontSize="14" 
-                               Foreground="White"
-                               VerticalAlignment="Center"/>
-                    <svg:Svg Path="/Assets/Icons/chevron-right.svg" Width="14" Height="14"/>
-                    <TextBlock Text="latest" 
-                               FontSize="14" 
-                               Foreground="#999"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
+        <!-- BOTTOM RIGHT: Play Button with Version Selector -->
+        <Grid VerticalAlignment="Bottom" HorizontalAlignment="Right">
+            <Border x:Name="PlaySplitButtonContainer"
+                    CornerRadius="10"
+                    ClipToBounds="True">
+                <Grid ColumnDefinitions="Auto, Auto" Height="50">
+                    <Button Classes="VersionAreaButton"
+                            Command="{Binding OpenInstancesCommand}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <svg:Svg Path="/Assets/Icons/git-branch.svg" Width="16" Height="16">
+                                <svg:Svg.Css>* { stroke: #ddd !important; fill: #ddd !important; }</svg:Svg.Css>
+                            </svg:Svg>
+                            <TextBlock Text="{Binding SelectedBranchVersionLabel}" 
+                                       FontSize="13" 
+                                       Foreground="#ddd"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <btn:PrimaryButton Grid.Column="1"
+                                       Command="{Binding LaunchCommand}"
+                                       Height="50"
+                                       Padding="18,0"
+                                       CornerRadius="0,10,10,0"
+                                       FontSize="18">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <svg:Svg Path="/Assets/Icons/play.svg" Width="20" Height="20">
+                                <svg:Svg.Css>* { stroke: #111 !important; fill: #111 !important; }</svg:Svg.Css>
+                            </svg:Svg>
+                            <TextBlock Text="{Binding MainPlay^}" VerticalAlignment="Center" Foreground="#111"/>
+                        </StackPanel>
+                    </btn:PrimaryButton>
+                </Grid>
             </Border>
-            
-            <!-- Play Button -->
-            <btn:PrimaryButton Command="{Binding LaunchCommand}" 
-                               Height="50"
-                               FontSize="18">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <svg:Svg Path="/Assets/Icons/play.svg" Width="20" Height="20">
-                        <svg:Svg.Css>* { stroke: #111 !important; fill: #111 !important; }</svg:Svg.Css>
-                    </svg:Svg>
-                    <TextBlock Text="{Binding MainPlay^}" VerticalAlignment="Center"/>
-                </StackPanel>
-            </btn:PrimaryButton>
-        </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

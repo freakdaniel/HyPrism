@@ -76,7 +76,10 @@
       "title": "Örnek Yönetimi",
       "description": "Yüklü oyun sürümlerinizi yönetin",
       "openFolder": "Klasörü Aç",
-      "delete": "Örneği Sil"
+      "delete": "Örneği Sil",
+      "launchBranch": "Başlatma dalı",
+      "userData": "Kullanıcı verileri",
+      "empty": "Görünüşe göre henüz hiçbir şey indirmedin."
     },
     "aboutSettings": {
       "title": "HyPrism Başlatıcısı",

@@ -78,7 +78,10 @@
       "title": "实例管理",
       "description": "管理您已安装的游戏版本",
       "openFolder": "打开文件夹",
-      "delete": "删除实例"
+      "delete": "删除实例",
+      "launchBranch": "启动分支",
+      "userData": "用户数据",
+      "empty": "看起来你还没有下载任何内容。"
     },
     "aboutSettings": {
       "title": "HyPrism 启动器",
