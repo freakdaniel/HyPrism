@@ -20,14 +20,6 @@
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
-  <!-- Exclude old code in IMPORTANT folder from compilation -->
-  <ItemGroup>
-    <Compile Remove="IMPORTANT/**/*.cs" />
-    <Content Remove="IMPORTANT/**/*" />
-    <None Remove="IMPORTANT/**/*" />
-    <EmbeddedResource Remove="IMPORTANT/**/*" />
-  </ItemGroup>
-
   <!-- Avalonia packages -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.11" />
@@ -58,19 +50,4 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets/Locales/*.json" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="wwwroot/**/*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="jre.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="assets/game-lang/**/*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>game-lang/%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </Content>
-  </ItemGroup>
-
 </Project>
