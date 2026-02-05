@@ -168,6 +168,10 @@
       "launching": "Başlatılıyor",
       "complete": "Tamamlandı"
     },
+    "option": {
+      "runAfterDownload": "İndirme sonrası oyunu başlat",
+      "cancel": "Oyun başlatma/indirme işlemini iptal et"
+    },
     "detail": {
       "preparing_session": "Oyun oturumu hazırlanıyor...",
       "checking_install": "Kurulum kontrol ediliyor...",

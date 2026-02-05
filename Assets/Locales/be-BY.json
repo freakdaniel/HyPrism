@@ -170,6 +170,10 @@
       "launching": "Запуск",
       "complete": "Гатова"
     },
+    "option": {
+      "runAfterDownload": "Запусціць гульню пасля загрузкі",
+      "cancel": "Скасаваць запуск/загрузку гульні"
+    },
     "detail": {
       "preparing_session": "Падрыхтоўка сесіі...",
       "checking_install": "Праверка ўсталёўкі...",

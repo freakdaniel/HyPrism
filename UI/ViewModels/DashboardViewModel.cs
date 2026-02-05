@@ -209,6 +209,28 @@ public class DashboardViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _progressIconPath, value);
     }
 
+    private bool _isLaunchCancelRequested;
+
+    private bool _launchAfterDownload = true;
+    public bool LaunchAfterDownload
+    {
+        get => _launchAfterDownload;
+        set => this.RaiseAndSetIfChanged(ref _launchAfterDownload, value);
+    }
+
+    private bool _isLaunchAfterDownloadVisible;
+    public bool IsLaunchAfterDownloadVisible
+    {
+        get => _isLaunchAfterDownloadVisible;
+        set => this.RaiseAndSetIfChanged(ref _isLaunchAfterDownloadVisible, value);
+    }
+
+    private readonly ObservableAsPropertyHelper<string> _launchAfterDownloadLabel;
+    public string LaunchAfterDownloadLabel => _launchAfterDownloadLabel.Value;
+
+    private readonly ObservableAsPropertyHelper<string> _cancelLaunchLabel;
+    public string CancelLaunchLabel => _cancelLaunchLabel.Value;
+
     // Error
     private string _errorMessage = "";
     public string ErrorMessage
@@ -227,6 +249,7 @@ public class DashboardViewModel : ReactiveObject
     // Commands
     public ReactiveCommand<Unit, Unit> CloseErrorModalCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyErrorCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelLaunchCommand { get; }
 
     public DashboardViewModel(
         GameSessionService gameSessionService,
@@ -286,6 +309,14 @@ public class DashboardViewModel : ReactiveObject
                 (s, m, p, e) => s || m || p || e)
             .ToProperty(this, x => x.IsOverlayOpen);
 
+        _launchAfterDownloadLabel = LocalizationService.Instance
+            .GetObservable("launch.option.runAfterDownload")
+            .ToProperty(this, x => x.LaunchAfterDownloadLabel);
+
+        _cancelLaunchLabel = LocalizationService.Instance
+            .GetObservable("launch.option.cancel")
+            .ToProperty(this, x => x.CancelLaunchLabel);
+
         // --- Setup Actions ---
         Action toggleSettingsAction = () => IsSettingsOpen = !IsSettingsOpen;
         Action toggleProfileEditorAction = () => { _ = ToggleProfileEditorAsync(); };
@@ -325,6 +356,7 @@ public class DashboardViewModel : ReactiveObject
         {
              // TODO: Clip
         });
+           CancelLaunchCommand = ReactiveCommand.Create(CancelLaunch);
 
         // --- Subscriptions ---
         _progressService.DownloadProgressChanged += OnDownloadProgressChanged;
@@ -355,6 +387,8 @@ public class DashboardViewModel : ReactiveObject
     private async Task LaunchAsync()
     {
         if (IsLaunchOverlayVisible) return;
+
+        _isLaunchCancelRequested = false;
         
         // Reset state with localized values matching "preparing" event
         // This ensures smooth visual transition (no icon swap) when service starts
@@ -365,15 +399,22 @@ public class DashboardViewModel : ReactiveObject
         ProgressIconPath = "/Assets/Icons/settings.svg"; // Matches 'preparing' state icon
         ProgressText = LocalizationService.Instance.Translate("launch.detail.preparing");
         if (string.IsNullOrEmpty(ProgressText)) ProgressText = "Preparing game session...";
+
+        IsLaunchAfterDownloadVisible = false;
         
         IsLaunchOverlayVisible = true;
         
         try
         {
-            var result = await _gameSessionService.DownloadAndLaunchAsync();
+            var result = await _gameSessionService.DownloadAndLaunchAsync(() => LaunchAfterDownload);
             
             if (result.Error != null)
             {
+                if (_isLaunchCancelRequested || string.Equals(result.Error, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    IsLaunchOverlayVisible = false;
+                    return;
+                }
                 IsLaunchOverlayVisible = false;
                 OnErrorOccurred("launch", "Launch failed", result.Error);
                 return;
@@ -401,6 +442,11 @@ public class DashboardViewModel : ReactiveObject
     private void OnDownloadProgressChanged(ProgressUpdateMessage msg)
     {
         Dispatcher.UIThread.InvokeAsync(() => {
+
+            if (_isLaunchCancelRequested)
+            {
+                return;
+            }
             
             // Set Icon
             ProgressIconPath = msg.State switch
@@ -417,6 +463,8 @@ public class DashboardViewModel : ReactiveObject
 
             if (IsLaunchOverlayVisible) 
             {
+                IsLaunchAfterDownloadVisible = msg.State == "download";
+
                 // Title
                 StatusTitle = LocalizationService.Instance.Translate($"launch.state.{msg.State}");
                 if (string.IsNullOrEmpty(StatusTitle)) StatusTitle = msg.State; // Fallback
@@ -444,6 +492,18 @@ public class DashboardViewModel : ReactiveObject
                 }
             }
         });
+    }
+
+    private void CancelLaunch()
+    {
+        if (!IsLaunchOverlayVisible)
+        {
+            return;
+        }
+
+        _isLaunchCancelRequested = true;
+        IsLaunchOverlayVisible = false;
+        _gameSessionService.CancelDownload();
     }
 
     private void OnErrorOccurred(string type, string message, string? trace)

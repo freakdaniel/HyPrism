@@ -169,6 +169,10 @@
       "launching": "Запуск",
       "complete": "Готово"
     },
+    "option": {
+      "runAfterDownload": "Запустить игру после загрузки",
+      "cancel": "Отменить запуск/загрузку игры"
+    },
     "detail": {
       "preparing_session": "Подготовка сессии...",
       "checking_install": "Проверка установки...",

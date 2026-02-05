@@ -168,6 +168,10 @@
       "launching": "Starten",
       "complete": "Fertig"
     },
+    "option": {
+      "runAfterDownload": "Spiel nach dem Download starten",
+      "cancel": "Spielstart/Download abbrechen"
+    },
     "detail": {
       "preparing_session": "Sitzung wird vorbereitet...",
       "checking_install": "Installation prüfen...",

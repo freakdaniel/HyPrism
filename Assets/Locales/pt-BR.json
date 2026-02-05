@@ -168,6 +168,10 @@
       "launching": "Iniciando",
       "complete": "Completo"
     },
+    "option": {
+      "runAfterDownload": "Iniciar o jogo após o download",
+      "cancel": "Cancelar inicialização/download do jogo"
+    },
     "detail": {
       "preparing_session": "Preparando sessão...",
       "checking_install": "Verificando instalação...",

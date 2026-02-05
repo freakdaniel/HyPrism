@@ -168,6 +168,10 @@
       "launching": "Запуск",
       "complete": "Готово"
     },
+    "option": {
+      "runAfterDownload": "Запустити гру після завантаження",
+      "cancel": "Скасувати запуск/завантаження гри"
+    },
     "detail": {
       "preparing_session": "Підготовка сесії...",
       "checking_install": "Перевірка встановлення...",

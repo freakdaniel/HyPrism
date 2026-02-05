@@ -24,6 +24,7 @@ public class GameSessionService
     private readonly DiscordService _discordService;
     private readonly HttpClient _httpClient;
     private readonly string _appDir;
+    private bool _cancelRequested;
 
     private CancellationTokenSource? _downloadCts;
 
@@ -63,15 +64,26 @@ public class GameSessionService
 
     private Config _config => _configService.Configuration;
 
-    public async Task<DownloadProgress> DownloadAndLaunchAsync()
+    public async Task<DownloadProgress> DownloadAndLaunchAsync(Func<bool>? launchAfterDownloadProvider = null)
     {
         try
         {
+            if (_cancelRequested)
+            {
+                _cancelRequested = false;
+                return new DownloadProgress { Cancelled = true };
+            }
+
             _downloadCts = new CancellationTokenSource();
             _progressService.ReportDownloadProgress("preparing", 0, "Preparing game session...", null, 0, 0);
             
             string branch = UtilityService.NormalizeVersionType(_config.VersionType);
             var versions = await _versionService.GetVersionListAsync(branch);
+            if (_cancelRequested)
+            {
+                _cancelRequested = false;
+                return new DownloadProgress { Cancelled = true };
+            }
             if (versions.Count == 0)
             {
                 return new DownloadProgress { Error = "No versions available for this branch" };
@@ -471,6 +483,13 @@ public class GameSessionService
 
             ThrowIfCancelled();
 
+            var shouldLaunchAfterDownload = launchAfterDownloadProvider?.Invoke() ?? true;
+            if (!shouldLaunchAfterDownload)
+            {
+                _progressService.ReportDownloadProgress("complete", 100, "launch.detail.done", null, 0, 0);
+                return new DownloadProgress { Success = true, Progress = 100 };
+            }
+
             _progressService.ReportDownloadProgress("complete", 100, "Launching game...", null, 0, 0);
 
             try
@@ -508,11 +527,13 @@ public class GameSessionService
         finally 
         {
             _downloadCts = null;
+            _cancelRequested = false;
         }
     }
 
     public void CancelDownload()
     {
+        _cancelRequested = true;
         _downloadCts?.Cancel();
     }
 

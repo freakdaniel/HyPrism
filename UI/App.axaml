@@ -25,6 +25,8 @@
             <converters:ProgressToWidthConverter x:Key="ProgressToWidthConverter"/>
             <converters:TabPositionConverter x:Key="TabPositionConverter"/>
             <converters:StringEqualityConverter x:Key="StringEqualityConverter"/>
+            <converters:BoolToDoubleConverter x:Key="BoolToOpacityConverter" TrueValue="1" FalseValue="0"/>
+            <converters:BoolToThicknessConverter x:Key="BoolToLaunchCheckboxMarginConverter" />
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>

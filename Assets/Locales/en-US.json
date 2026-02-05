@@ -101,6 +101,10 @@
       "launching": "Launching",
       "complete": "Complete"
     },
+    "option": {
+      "runAfterDownload": "Run game after download",
+      "cancel": "Cancel game launch/download process"
+    },
     "detail": {
       "preparing_session": "Preparing game session...",
       "checking_install": "Checking installation...",

@@ -32,6 +32,13 @@ public class VersionService
         string osName = UtilityService.GetOS();
         string arch = UtilityService.GetArch();
 
+        var freshCache = TryLoadFreshVersionsCache(normalizedBranch, osName, arch, TimeSpan.FromMinutes(15));
+        if (freshCache != null)
+        {
+            Logger.Info("Version", $"Using cached versions for {branch}");
+            return freshCache;
+        }
+
         // Load version cache
         var cache = LoadVersionCache();
         int startVersion = 1;
@@ -98,6 +105,8 @@ public class VersionService
         cache.KnownVersions[normalizedBranch] = result;
         cache.LastUpdated = DateTime.UtcNow;
         SaveVersionCache(cache);
+
+        SaveVersionsCacheSnapshot(normalizedBranch, osName, arch, result);
         
         Logger.Info("Version", $"Found {result.Count} versions for {branch}: [{string.Join(", ", result)}]");
         return result;
@@ -307,6 +316,83 @@ public class VersionService
             "alpha" => "alpha",
             _ => "release"
         };
+    }
+
+    private sealed class VersionsCacheSnapshot
+    {
+        public DateTime FetchedAtUtc { get; set; }
+        public string Os { get; set; } = "";
+        public string Arch { get; set; } = "";
+        public Dictionary<string, List<int>> Versions { get; set; } = new();
+    }
+
+    private string GetVersionsCacheSnapshotPath()
+        => Path.Combine(_appDir, "Cache", "Game", "versions.json");
+
+    private List<int>? TryLoadFreshVersionsCache(string branch, string osName, string arch, TimeSpan maxAge)
+    {
+        try
+        {
+            var path = GetVersionsCacheSnapshotPath();
+            if (!File.Exists(path)) return null;
+
+            var json = File.ReadAllText(path);
+            var snapshot = JsonSerializer.Deserialize<VersionsCacheSnapshot>(json);
+            if (snapshot == null) return null;
+
+            if (!string.Equals(snapshot.Os, osName, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!string.Equals(snapshot.Arch, arch, StringComparison.OrdinalIgnoreCase)) return null;
+
+            var age = DateTime.UtcNow - snapshot.FetchedAtUtc;
+            if (age > maxAge) return null;
+
+            if (snapshot.Versions.TryGetValue(branch, out var versions) && versions.Count > 0)
+            {
+                return new List<int>(versions);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("Version", $"Failed to load versions cache snapshot: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private void SaveVersionsCacheSnapshot(string branch, string osName, string arch, List<int> versions)
+    {
+        try
+        {
+            var path = GetVersionsCacheSnapshotPath();
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            VersionsCacheSnapshot snapshot;
+            if (File.Exists(path))
+            {
+                var existingJson = File.ReadAllText(path);
+                snapshot = JsonSerializer.Deserialize<VersionsCacheSnapshot>(existingJson) ?? new VersionsCacheSnapshot();
+            }
+            else
+            {
+                snapshot = new VersionsCacheSnapshot();
+            }
+
+            snapshot.FetchedAtUtc = DateTime.UtcNow;
+            snapshot.Os = osName;
+            snapshot.Arch = arch;
+            snapshot.Versions[branch] = new List<int>(versions);
+
+            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning("Version", $"Failed to save versions cache snapshot: {ex.Message}");
+        }
     }
 }
 

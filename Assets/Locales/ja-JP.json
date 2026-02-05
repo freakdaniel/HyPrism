@@ -168,6 +168,10 @@
       "launching": "起動中",
       "complete": "完了"
     },
+    "option": {
+      "runAfterDownload": "ダウンロード後にゲームを起動する",
+      "cancel": "ゲームの起動/ダウンロードをキャンセル"
+    },
     "detail": {
       "preparing_session": "ゲームセッションを準備中...",
       "checking_install": "インストールを確認中...",

@@ -170,6 +170,10 @@
       "launching": "启动中",
       "complete": "完成"
     },
+    "option": {
+      "runAfterDownload": "下载完成后启动游戏",
+      "cancel": "取消启动/下载游戏"
+    },
     "detail": {
       "preparing_session": "正在准备游戏会话...",
       "checking_install": "正在检查安装...",

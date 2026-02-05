@@ -168,6 +168,10 @@
       "launching": "실행 중",
       "complete": "완료"
     },
+    "option": {
+      "runAfterDownload": "다운로드 후 게임 실행",
+      "cancel": "게임 실행/다운로드 취소"
+    },
     "detail": {
       "preparing_session": "게임 세션 준비 중...",
       "checking_install": "설치 확인 중...",
