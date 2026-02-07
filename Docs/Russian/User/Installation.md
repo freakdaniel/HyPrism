@@ -104,7 +104,7 @@ export DOTNET_ROLL_FORWARD=Major
 ### Требования
 
 - Git
-- .NET 10 SDK (Preview)
+- .NET 10 SDK
 
 ### Шаги
 

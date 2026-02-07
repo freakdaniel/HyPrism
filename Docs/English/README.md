@@ -60,7 +60,7 @@ dotnet run
 ```
 
 **Requirements:**
-- .NET 10 SDK (Preview)
+- .NET 10 SDK
 - On Linux: `libSkiaSharp.so` or `DOTNET_ROLL_FORWARD=Major`
 
 ---
@@ -69,10 +69,9 @@ dotnet run
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| .NET | 10.0 (Preview) | Platform |
+| .NET | 10.0 | Platform |
 | Avalonia UI | 11.3.11 | UI Framework |
 | ReactiveUI | 11.3.9 | Reactive MVVM |
-
 | SkiaSharp | 3.116.1 | Graphics Rendering |
 | Serilog | 4.3.0 | Logging |
 

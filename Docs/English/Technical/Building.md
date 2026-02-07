@@ -10,7 +10,7 @@ Detailed instructions for compiling HyPrism from source code.
 
 | Component | Requirement |
 |-----------|-------------|
-| **.NET SDK** | 10.0 (Preview) |
+| **.NET SDK** | 10.0 |
 | **Git** | Any modern version |
 | **IDE** | Visual Studio 2022, Rider, or VS Code |
 
@@ -106,15 +106,6 @@ sudo dnf install fontconfig libX11 libXext libXrender libSM libICE
 
 ```bash
 sudo pacman -S fontconfig libx11 libxext libxrender libsm libice
-```
-
-### .NET Version Issues
-
-If .NET 10 Preview causes issues:
-
-```bash
-export DOTNET_ROLL_FORWARD=Major
-dotnet run
 ```
 
 ---
@@ -215,7 +206,7 @@ dotnet publish -c Release -r linux-x64 --self-contained
 ### Docker (`Scripts/Dockerfile.build`)
 
 ```dockerfile
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview
+FROM mcr.microsoft.com/dotnet/sdk:10.0
 WORKDIR /app
 COPY . .
 RUN dotnet publish -c Release -r linux-x64 --self-contained
@@ -253,4 +244,4 @@ xattr -d com.apple.quarantine /path/to/HyPrism.app
 ## Troubleshooting
 
 *   **SkiaSharp Errors (Linux):** Ensure `libSkiaSharp.so` can be found. You may need to install `SkiaSharp.NativeAssets.Linux` NuGet package or install `libskia` system-wide.
-*   **"Preview" Runtime needed:** If the `.csproj` specifies `net10.0` and you only have `net8.0`, you must install the .NET 10 Preview SDK from Microsoft.
+*   **"10.0" Runtime needed:** If the `.csproj` specifies `net10.0` and you only have `net8.0`, you must install the .NET 10 SDK from Microsoft.

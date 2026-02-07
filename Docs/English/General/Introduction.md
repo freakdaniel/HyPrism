@@ -21,7 +21,7 @@ Unlike traditional Electron launchers that consume significant RAM and CPU resou
 
 | Component | Technology | Version | Description |
 |-----------|------------|---------|-------------|
-| **Runtime** | .NET | 10.0 (Preview) | Latest runtime for maximum performance |
+| **Runtime** | .NET | 10.0 | Latest runtime for maximum performance |
 | **Language** | C# | 13.0 | Using latest language features |
 | **UI Framework** | Avalonia UI | 11.3.11 | Declarative XAML-based UI framework |
 | **Architecture** | MVVM | - | Model-View-ViewModel for separation of concerns |

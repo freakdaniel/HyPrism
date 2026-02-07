@@ -104,7 +104,7 @@ On first launch, macOS may block the app from "Unknown Developer":
 ### Requirements
 
 - Git
-- .NET 10 SDK (Preview)
+- .NET 10 SDK
 
 ### Steps
 

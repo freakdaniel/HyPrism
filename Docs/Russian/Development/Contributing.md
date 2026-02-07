@@ -9,7 +9,7 @@
 | Инструмент | Требование |
 |------------|------------|
 | **IDE** | Visual Studio 2022, Rider, или VS Code |
-| **SDK** | .NET 10.0 (Preview) |
+| **SDK** | .NET 10.0 |
 | **Git** | Базовые знания git-операций |
 | **OS** | Windows 10+, Linux (Ubuntu 22.04+), macOS 12+ |
 

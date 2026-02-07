@@ -9,7 +9,7 @@ We welcome community contributions! Whether it's bug fixes, documentation improv
 | Tool | Requirement |
 |------|-------------|
 | **IDE** | Visual Studio 2022, Rider, or VS Code |
-| **SDK** | .NET 10.0 (Preview) |
+| **SDK** | .NET 10.0 |
 | **Git** | Basic knowledge of git operations |
 | **OS** | Windows 10+, Linux (Ubuntu 22.04+), macOS 12+ |
 

@@ -23,7 +23,7 @@ To ensure quality, maintainability, and consistency of code, all contributors mu
 
 ### Language Version
 
-- **Target Framework:** .NET 10 (Preview)
+- **Target Framework:** .NET 10
 - **C# Version:** 13 (latest)
 - Use the newest language features
 

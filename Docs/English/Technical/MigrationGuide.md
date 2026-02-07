@@ -352,38 +352,6 @@ public MyViewModel(ConfigService configService)
 
 ---
 
-## 📊 Migration Status (PR #299)
-
-### Completed ✅
-- [x] `AppService.cs` refactoring into separate services
-- [x] WebKit (Photino) dependency removal
-- [x] Main page
-- [x] Overlays
-- [x] Mod menu (UI only)
-- [x] News block
-- [x] Brand logos
-- [x] Localization
-- [x] Themes/Colors
-- [x] Build script updates
-
-### In Progress 🔄
-- [ ] First run screen
-- [ ] Styling
-- [ ] Settings menu
-- [ ] Profile menu
-- [ ] Discord RPC
-- [ ] Client events
-
-### Testing Required 🧪
-- [ ] UI artifacts
-- [ ] Background services
-- [ ] Configuration services
-- [ ] System dependencies
-- [ ] Cross-platform operation
-- [ ] Full application lifecycle
-
----
-
 ## 📚 Additional Resources
 
 - [Architecture.md](Architecture.md) — New architecture

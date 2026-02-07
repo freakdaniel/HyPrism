@@ -22,7 +22,7 @@
 
 ### Версия языка
 
-- **Target Framework:** .NET 10 (Preview)
+- **Target Framework:** .NET 10
 - **C# Version:** 13 (latest)
 - Используйте новейшие возможности языка
 
