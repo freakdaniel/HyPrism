@@ -14,7 +14,38 @@ public class GameProcessService : IGameProcessService
     private Process? _gameProcess;
 
     /// <inheritdoc/>
-    public void SetGameProcess(Process? p) => _gameProcess = p;
+    public event EventHandler? ProcessExited;
+
+    /// <inheritdoc/>
+    public void SetGameProcess(Process? p)
+    {
+        if (_gameProcess != null)
+        {
+            _gameProcess.Exited -= OnGameProcessExited;
+            _gameProcess.Dispose();
+        }
+
+        _gameProcess = p;
+        
+        if (p != null)
+        {
+            p.EnableRaisingEvents = true;
+            p.Exited += OnGameProcessExited;
+        }
+    }
+
+    private void OnGameProcessExited(object? sender, EventArgs e)
+    {
+        if (_gameProcess != null)
+        {
+            _gameProcess.Exited -= OnGameProcessExited;
+            _gameProcess.Dispose();
+            _gameProcess = null;
+
+            // Уведомляем подписчиков о завершении процесса
+            ProcessExited?.Invoke(this, EventArgs.Empty);
+        }
+    }
     
     /// <inheritdoc/>
     public Process? GetGameProcess() => _gameProcess;
@@ -22,15 +53,7 @@ public class GameProcessService : IGameProcessService
     /// <inheritdoc/>
     public bool IsGameRunning()
     {
-        // 1. Check tracked process
-        if (_gameProcess != null)
-        {
-            if (!_gameProcess.HasExited) return true;
-            _gameProcess.Dispose();
-            _gameProcess = null; // Cleanup
-        }
-        
-        return false;
+        return _gameProcess != null && !_gameProcess.HasExited;
     }
 
     /// <inheritdoc/>
@@ -38,6 +61,11 @@ public class GameProcessService : IGameProcessService
     {
         if (IsGameRunning()) return true;
 
+        return ScanForOrphanedGameProcess();
+    }
+
+    private bool ScanForOrphanedGameProcess()
+    {
         try
         {
             // Scan for java processes that look like Hytale

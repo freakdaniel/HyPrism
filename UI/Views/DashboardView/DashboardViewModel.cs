@@ -430,10 +430,19 @@ public class DashboardViewModel : ReactiveObject, IDisposable
         {
             var result = await Task.Run(() => _gameSessionService.DownloadAndLaunchAsync(() => LaunchAfterDownload));
             
+            // Check if cancellation was requested
+            if (_isLaunchCancelRequested)
+            {
+                Logger.Info("Launch", "Launch was cancelled by user");
+                IsLaunchOverlayVisible = false;
+                return;
+            }
+            
             if (result.Error != null)
             {
-                if (_isLaunchCancelRequested || string.Equals(result.Error, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(result.Error, "Cancelled", StringComparison.OrdinalIgnoreCase))
                 {
+                    Logger.Info("Launch", "Launch was cancelled");
                     IsLaunchOverlayVisible = false;
                     return;
                 }
@@ -444,12 +453,18 @@ public class DashboardViewModel : ReactiveObject, IDisposable
             
             if (result.Cancelled)
             {
+                Logger.Info("Launch", "Launch was cancelled (result.Cancelled = true)");
                 IsLaunchOverlayVisible = false;
                 return;
             }
 
             // Wait 2 seconds to let user see the "Done" state before fading out
             await Task.Delay(2000);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.Info("Launch", "Launch operation was cancelled");
+            IsLaunchOverlayVisible = false;
         }
         catch (Exception ex)
         {

@@ -61,6 +61,25 @@ public class GameLauncher : IGameLauncher
         _skinService = skinService;
         _userIdentityService = userIdentityService;
         _httpClient = httpClient;
+        _gameProcessService.ProcessExited += OnGameProcessExited;
+    }
+
+    private void OnGameProcessExited(object? sender, EventArgs e)
+    {
+        try
+        {
+            Logger.Info("Game", "Game process exited, performing cleanup...");
+
+            _skinService.StopSkinProtection();
+            _skinService.BackupProfileSkinData(_userIdentityService.GetUuidForUser(_config.Nick));
+
+            _discordService.SetPresence(DiscordService.PresenceState.Idle);
+            _progressService.ReportGameStateChanged("stopped", 0);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Game", $"Error during game exit cleanup: {ex.Message}");
+        }
     }
 
     /// <inheritdoc/>
@@ -83,7 +102,11 @@ public class GameLauncher : IGameLauncher
             Logger.Info("Game", "Cleared macOS quarantine attributes before patching");
         }
 
+        ct.ThrowIfCancellationRequested();
+
         await PatchClientIfNeededAsync(versionPath);
+
+        ct.ThrowIfCancellationRequested();
 
         _progressService.ReportDownloadProgress("launching", 0, "launch.detail.authenticating_generic", null, 0, 0);
 
@@ -103,6 +126,8 @@ public class GameLauncher : IGameLauncher
         LogLaunchInfo(executable, javaPath, versionPath, userDataDir, sessionUuid);
 
         var startInfo = BuildProcessStartInfo(executable, workingDir, versionPath, userDataDir, javaPath, sessionUuid, identityToken, sessionToken);
+
+        ct.ThrowIfCancellationRequested();
 
         await StartAndMonitorProcessAsync(startInfo, sessionUuid);
     }
@@ -403,11 +428,12 @@ exec env \
 
     private async Task StartAndMonitorProcessAsync(ProcessStartInfo startInfo, string sessionUuid)
     {
+        Process? process = null;
         try
         {
             _progressService.ReportDownloadProgress("launching", 80, "launch.detail.starting_process", null, 0, 0);
 
-            using var process = new Process { StartInfo = startInfo };
+            process = new Process { StartInfo = startInfo };
             var interfaceLoadedTcs = new TaskCompletionSource<bool>();
 
             var sysInfoBuffer = new List<string>();
@@ -477,6 +503,7 @@ exec env \
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
+            // Transfer ownership to GameProcessService (it will handle disposal and notify subscribers)
             _gameProcessService.SetGameProcess(process);
             Logger.Success("Game", $"Game started with PID: {process.Id}");
 
@@ -494,36 +521,19 @@ exec env \
             }
 
             _progressService.ReportDownloadProgress("complete", 100, "launch.detail.done", null, 0, 0);
-
-            // Monitor process exit in a safe background task
-            _ = MonitorProcessExitAsync(process, sessionUuid);
         }
         catch (Exception ex)
         {
             Logger.Error("Game", $"Failed to start game process: {ex.Message}");
+            
+            // Cleanup process if failed before transferring to GameProcessService
+            if (process != null && _gameProcessService.GetGameProcess() != process)
+            {
+                try { process.Dispose(); } catch { }
+            }
+            
             _progressService.ReportError("launch", "Failed to start game", ex.Message);
             throw new Exception($"Failed to start game: {ex.Message}");
-        }
-    }
-
-    private async Task MonitorProcessExitAsync(Process process, string sessionUuid)
-    {
-        try
-        {
-            await process.WaitForExitAsync();
-            var exitCode = process.ExitCode;
-            Logger.Info("Game", $"Game process exited with code: {exitCode}");
-            _gameProcessService.SetGameProcess(null);
-
-            _skinService.StopSkinProtection();
-            _skinService.BackupProfileSkinData(_userIdentityService.GetUuidForUser(_config.Nick));
-
-            _discordService.SetPresence(DiscordService.PresenceState.Idle);
-            _progressService.ReportGameStateChanged("stopped", exitCode);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Game", $"Error monitoring game process: {ex.Message}");
         }
     }
 }

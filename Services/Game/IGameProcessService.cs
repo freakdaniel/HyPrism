@@ -8,6 +8,11 @@ namespace HyPrism.Services.Game;
 public interface IGameProcessService
 {
     /// <summary>
+    /// Raised when the tracked game process has exited.
+    /// </summary>
+    event EventHandler? ProcessExited;
+
+    /// <summary>
     /// Sets the current game process reference.
     /// </summary>
     /// <param name="p">The game process, or <c>null</c> to clear the reference.</param>
